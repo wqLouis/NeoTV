@@ -1,8 +1,8 @@
-use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
+use once_cell::sync::Lazy;
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri;
-use once_cell::sync::Lazy; // For lazy static initialization
+use tauri; // For lazy static initialization
 
 // --- API Configuration Structures ---
 
@@ -20,7 +20,7 @@ struct ApiSourceInfo {
     api_type: ApiType, // To distinguish between JSON API and HTML scraping for details
     search_path: Option<String>, // Specific search path if different from default
     detail_path: Option<String>, // Specific detail path if different from default (for JSON APIs)
-    // Example: some sources might use /vodsearch instead of /api.php/provide/vod/...
+                       // Example: some sources might use /vodsearch instead of /api.php/provide/vod/...
 }
 
 // Using a more specific name for the map key if needed, e.g. SourceId(String)
@@ -29,151 +29,230 @@ static API_SITES_CONFIG: Lazy<HashMap<String, ApiSourceInfo>> = Lazy::new(|| {
     // Data from public/js/config.js API_SITES, adapted for Rust
     // Note: Detail paths for HTML sources are usually part of detail_base_url construction
     // Search paths and detail paths for JSON sources can use defaults or be overridden here
-    
+
     // Example entry (need to populate all from config.js)
-    m.insert("dyttzy".to_string(), ApiSourceInfo {
-        api_base_url: "http://caiji.dyttzyapi.com".to_string(),
-        name: "电影天堂资源".to_string(),
-        detail_base_url: Some("http://caiji.dyttzyapi.com".to_string()), // Assuming it's JSON, or specific HTML base
-        api_type: ApiType::Json, // Assuming JSON, adjust if it's HTML scraping for detail
-        search_path: None, // Uses default
-        detail_path: None, // Uses default
-    });
-    m.insert("ruyi".to_string(), ApiSourceInfo {
-        api_base_url: "https://cj.rycjapi.com".to_string(),
-        name: "如意资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("bfzy".to_string(), ApiSourceInfo {
-        api_base_url: "https://bfzyapi.com".to_string(),
-        name: "暴风资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("tyyszy".to_string(), ApiSourceInfo {
-        api_base_url: "https://tyyszy.com".to_string(),
-        name: "天涯资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("xiaomaomi".to_string(), ApiSourceInfo {
-        api_base_url: "https://zy.xiaomaomi.cc".to_string(),
-        name: "小猫咪资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("ffzy".to_string(), ApiSourceInfo { // ffzy has HTML detail
-        api_base_url: "http://ffzy5.tv".to_string(),
-        name: "非凡影视".to_string(),
-        detail_base_url: Some("http://ffzy5.tv".to_string()), // Base for HTML detail
-        api_type: ApiType::Html, // Detail is HTML
-        search_path: None, // JSON search
-        detail_path: Some("/index.php/vod/detail/id/{id}.html".to_string()), // Path template for HTML detail
-    });
-    m.insert("heimuer".to_string(), ApiSourceInfo { // heimuer has HTML detail
-        api_base_url: "https://json.heimuer.xyz".to_string(),
-        name: "黑木耳".to_string(),
-        detail_base_url: Some("https://heimuer.tv".to_string()), // Base for HTML detail
-        api_type: ApiType::Html, // Detail is HTML
-        search_path: None, // JSON search
-        detail_path: Some("/index.php/vod/detail/id/{id}.html".to_string()), // Path template for HTML detail
-    });
-    m.insert("zy360".to_string(), ApiSourceInfo {
-        api_base_url: "https://360zy.com".to_string(),
-        name: "360资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("wolong".to_string(), ApiSourceInfo {
-        api_base_url: "https://wolongzyw.com".to_string(),
-        name: "卧龙资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("hwba".to_string(), ApiSourceInfo {
-        api_base_url: "https://cjhwba.com".to_string(),
-        name: "华为吧资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("jisu".to_string(), ApiSourceInfo {
-        api_base_url: "https://jszyapi.com".to_string(),
-        name: "极速资源".to_string(),
-        detail_base_url: Some("https://jszyapi.com".to_string()),
-        api_type: ApiType::Json, // Assuming JSON, adjust if HTML
-        search_path: None, detail_path: None,
-    });
-    m.insert("dbzy".to_string(), ApiSourceInfo {
-        api_base_url: "https://dbzy.com".to_string(),
-        name: "豆瓣资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("mozhua".to_string(), ApiSourceInfo {
-        api_base_url: "https://mozhuazy.com".to_string(),
-        name: "魔爪资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("mdzy".to_string(), ApiSourceInfo {
-        api_base_url: "https://www.mdzyapi.com".to_string(),
-        name: "魔都资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("zuid".to_string(), ApiSourceInfo {
-        api_base_url: "https://api.zuidapi.com".to_string(),
-        name: "最大资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("yinghua".to_string(), ApiSourceInfo {
-        api_base_url: "https://m3u8.apiyhzy.com".to_string(),
-        name: "樱花资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("baidu".to_string(), ApiSourceInfo {
-        api_base_url: "https://api.apibdzy.com".to_string(),
-        name: "百度云资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("wujin".to_string(), ApiSourceInfo {
-        api_base_url: "https://api.wujinapi.me".to_string(),
-        name: "无尽资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("wwzy".to_string(), ApiSourceInfo {
-        api_base_url: "https://wwzy.tv".to_string(),
-        name: "旺旺短剧".to_string(),
-        detail_base_url: None, // Assuming JSON, adjust if HTML
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
-    m.insert("ikun".to_string(), ApiSourceInfo {
-        api_base_url: "https://ikunzyapi.com".to_string(),
-        name: "iKun资源".to_string(),
-        detail_base_url: None,
-        api_type: ApiType::Json,
-        search_path: None, detail_path: None,
-    });
+    m.insert(
+        "dyttzy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "http://caiji.dyttzyapi.com".to_string(),
+            name: "电影天堂资源".to_string(),
+            detail_base_url: Some("http://caiji.dyttzyapi.com".to_string()), // Assuming it's JSON, or specific HTML base
+            api_type: ApiType::Json, // Assuming JSON, adjust if it's HTML scraping for detail
+            search_path: None,       // Uses default
+            detail_path: None,       // Uses default
+        },
+    );
+    m.insert(
+        "ruyi".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://cj.rycjapi.com".to_string(),
+            name: "如意资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "bfzy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://bfzyapi.com".to_string(),
+            name: "暴风资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "tyyszy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://tyyszy.com".to_string(),
+            name: "天涯资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "xiaomaomi".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://zy.xiaomaomi.cc".to_string(),
+            name: "小猫咪资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "ffzy".to_string(),
+        ApiSourceInfo {
+            // ffzy has HTML detail
+            api_base_url: "http://ffzy5.tv".to_string(),
+            name: "非凡影视".to_string(),
+            detail_base_url: Some("http://ffzy5.tv".to_string()), // Base for HTML detail
+            api_type: ApiType::Html,                              // Detail is HTML
+            search_path: None,                                    // JSON search
+            detail_path: Some("/index.php/vod/detail/id/{id}.html".to_string()), // Path template for HTML detail
+        },
+    );
+    m.insert(
+        "heimuer".to_string(),
+        ApiSourceInfo {
+            // heimuer has HTML detail
+            api_base_url: "https://json.heimuer.xyz".to_string(),
+            name: "黑木耳".to_string(),
+            detail_base_url: Some("https://heimuer.tv".to_string()), // Base for HTML detail
+            api_type: ApiType::Html,                                 // Detail is HTML
+            search_path: None,                                       // JSON search
+            detail_path: Some("/index.php/vod/detail/id/{id}.html".to_string()), // Path template for HTML detail
+        },
+    );
+    m.insert(
+        "zy360".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://360zy.com".to_string(),
+            name: "360资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "wolong".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://wolongzyw.com".to_string(),
+            name: "卧龙资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "hwba".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://cjhwba.com".to_string(),
+            name: "华为吧资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "jisu".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://jszyapi.com".to_string(),
+            name: "极速资源".to_string(),
+            detail_base_url: Some("https://jszyapi.com".to_string()),
+            api_type: ApiType::Json, // Assuming JSON, adjust if HTML
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "dbzy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://dbzy.com".to_string(),
+            name: "豆瓣资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "mozhua".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://mozhuazy.com".to_string(),
+            name: "魔爪资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "mdzy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://www.mdzyapi.com".to_string(),
+            name: "魔都资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "zuid".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://api.zuidapi.com".to_string(),
+            name: "最大资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "yinghua".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://m3u8.apiyhzy.com".to_string(),
+            name: "樱花资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "baidu".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://api.apibdzy.com".to_string(),
+            name: "百度云资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "wujin".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://api.wujinapi.me".to_string(),
+            name: "无尽资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "wwzy".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://wwzy.tv".to_string(),
+            name: "旺旺短剧".to_string(),
+            detail_base_url: None, // Assuming JSON, adjust if HTML
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
+    m.insert(
+        "ikun".to_string(),
+        ApiSourceInfo {
+            api_base_url: "https://ikunzyapi.com".to_string(),
+            name: "iKun资源".to_string(),
+            detail_base_url: None,
+            api_type: ApiType::Json,
+            search_path: None,
+            detail_path: None,
+        },
+    );
     // Add other sources from config.js here...
     m
 });
@@ -210,7 +289,6 @@ struct SearchResponse {
     list: serde_json::Value, // Assuming list can be any array of objects
                              // Or define a Vec<SearchResultItem> if item structure is fixed
 }
-
 
 #[tauri::command]
 async fn search_videos(
@@ -259,7 +337,10 @@ async fn search_videos(
         }
     }
 
-    let search_path_template = source_info.search_path.as_deref().unwrap_or(&API_PATH_DEFAULTS.search);
+    let search_path_template = source_info
+        .search_path
+        .as_deref()
+        .unwrap_or(&API_PATH_DEFAULTS.search);
     // Ensure query is URL encoded
     let encoded_query = urlencoding::encode(&query);
     let full_url = format!("{}{}{}", base_url, search_path_template, encoded_query);
@@ -269,13 +350,13 @@ async fn search_videos(
     let mut headers = HashMap::new();
     headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36".to_string());
     headers.insert("Accept".to_string(), "application/json".to_string());
-    
+
     let http_options = HttpRequestOptions {
         url: full_url,
         method: Some("GET".to_string()),
         headers: Some(headers),
         body: None,
-        timeout_secs: Some(20), // Default timeout
+        timeout_secs: Some(20),       // Default timeout
         response_as_text: Some(true), // Get raw body to pass to JS
     };
 
@@ -312,9 +393,7 @@ async fn search_videos(
     }
 }
 
-
 // --- End New Tauri Commands ---
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HttpRequestOptions {
@@ -340,21 +419,26 @@ pub struct HttpError {
 }
 
 #[tauri::command]
-async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> { // Removed pub
-    log::debug!("[Rust] make_http_request called with URL: {}, Method: {:?}, Headers: {:?}, Timeout: {:?}", 
-        options.url, 
-        options.method, 
-        options.headers, 
+async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> {
+    // Removed pub
+    log::debug!(
+        "[Rust] make_http_request called with URL: {}, Method: {:?}, Headers: {:?}, Timeout: {:?}",
+        options.url,
+        options.method,
+        options.headers,
         options.timeout_secs
     );
 
     let client_builder = reqwest::Client::builder();
-    
+
     let timeout_duration = std::time::Duration::from_secs(options.timeout_secs.unwrap_or(20));
     let client = client_builder
         .timeout(timeout_duration)
         .build()
-        .map_err(|e| HttpError { error: "Failed to build HTTP client".to_string(), details: Some(e.to_string()) })?;
+        .map_err(|e| HttpError {
+            error: "Failed to build HTTP client".to_string(),
+            details: Some(e.to_string()),
+        })?;
 
     let method_str = options.method.unwrap_or_else(|| "GET".to_string());
     let method_for_reqwest = match method_str.to_uppercase().as_str() {
@@ -379,28 +463,32 @@ async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, 
                     eprintln!("Invalid header value for {}: {}", key, value);
                 }
             } else {
-                 eprintln!("Invalid header name: {}", key);
+                eprintln!("Invalid header name: {}", key);
             }
         }
     }
     request_builder = request_builder.headers(req_headers.clone());
 
     if let Some(body_value) = options.body {
-        let content_type_is_json = req_headers
-            .get(CONTENT_TYPE)
-            .map_or(false, |ct| ct.to_str().unwrap_or("").contains("application/json"));
+        let content_type_is_json = req_headers.get(CONTENT_TYPE).map_or(false, |ct| {
+            ct.to_str().unwrap_or("").contains("application/json")
+        });
 
-        if method_str.eq_ignore_ascii_case("POST") || method_str.eq_ignore_ascii_case("PUT") || method_str.eq_ignore_ascii_case("PATCH") { // Removed unnecessary parentheses
+        if method_str.eq_ignore_ascii_case("POST")
+            || method_str.eq_ignore_ascii_case("PUT")
+            || method_str.eq_ignore_ascii_case("PATCH")
+        {
+            // Removed unnecessary parentheses
             if content_type_is_json {
-                 request_builder = request_builder.json(&body_value);
+                request_builder = request_builder.json(&body_value);
             } else if let Some(body_str) = body_value.as_str() {
-                 request_builder = request_builder.body(body_str.to_string());
+                request_builder = request_builder.body(body_str.to_string());
             } else {
-                 request_builder = request_builder.body(body_value.to_string());
+                request_builder = request_builder.body(body_value.to_string());
             }
         }
     }
-    
+
     match request_builder.send().await {
         Ok(response) => {
             let status = response.status().as_u16();
@@ -410,7 +498,7 @@ async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, 
                     resp_headers.insert(key.as_str().to_string(), val_str.to_string());
                 }
             }
-            
+
             match response.text().await {
                 Ok(text_body) => {
                     log::debug!("[Rust] make_http_request successful for URL: {}. Status: {}. Response body (first 100 chars): {:.100}", options.url, status, text_body);
@@ -419,25 +507,48 @@ async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, 
                         headers: resp_headers,
                         body: text_body,
                     })
-                },
+                }
                 Err(e) => {
                     log::error!("[Rust] make_http_request failed to read response body for URL: {}. Error: {}", options.url, e);
-                    Err(HttpError { error: "Failed to read response body".to_string(), details: Some(e.to_string()) })
+                    Err(HttpError {
+                        error: "Failed to read response body".to_string(),
+                        details: Some(e.to_string()),
+                    })
                 }
             }
         }
         Err(e) => {
-            log::error!("[Rust] make_http_request failed for URL: {}. Error: {}", options.url, e);
+            log::error!(
+                "[Rust] make_http_request failed for URL: {}. Error: {}",
+                options.url,
+                e
+            );
             let error_details = e.to_string();
-            let error_type = if e.is_timeout() { "Request timed out".to_string() }
-                else if e.is_connect() { "Connection error".to_string() }
-                else if e.is_builder() { "Request builder error".to_string() }
-                else if e.is_redirect() { "Redirect policy error".to_string() }
-                else if e.is_status() { format!("HTTP status error: {}", e.status().map_or_else(|| "Unknown".to_string(), |s| s.as_u16().to_string())) }
-                else if e.is_body() { "Response body error".to_string() }
-                else if e.is_decode() { "Response decoding error".to_string() }
-                else { "HTTP request failed".to_string() };
-            Err(HttpError { error: error_type, details: Some(error_details) })
+            let error_type = if e.is_timeout() {
+                "Request timed out".to_string()
+            } else if e.is_connect() {
+                "Connection error".to_string()
+            } else if e.is_builder() {
+                "Request builder error".to_string()
+            } else if e.is_redirect() {
+                "Redirect policy error".to_string()
+            } else if e.is_status() {
+                format!(
+                    "HTTP status error: {}",
+                    e.status()
+                        .map_or_else(|| "Unknown".to_string(), |s| s.as_u16().to_string())
+                )
+            } else if e.is_body() {
+                "Response body error".to_string()
+            } else if e.is_decode() {
+                "Response decoding error".to_string()
+            } else {
+                "HTTP request failed".to_string()
+            };
+            Err(HttpError {
+                error: error_type,
+                details: Some(error_details),
+            })
         }
     }
 }
@@ -446,30 +557,29 @@ async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // let mut log_builder = Builder::default(); // Temporarily commented out
-  // log_builder = log_builder.target(Target::Stdout); // Temporarily commented out
-  // log_builder = log_builder.target(Target::Webview); // Temporarily commented out
-  // #[cfg(target_os = "android")]
-  // {
+    // let mut log_builder = Builder::default(); // Temporarily commented out
+    // log_builder = log_builder.target(Target::Stdout); // Temporarily commented out
+    // log_builder = log_builder.target(Target::Webview); // Temporarily commented out
+    // #[cfg(target_os = "android")]
+    // {
     // log_builder = log_builder.target(Target::Os); // Temporarily commented out
-  // }
-  
-  tauri::Builder::default()
-    // .plugin( // Temporarily commented out
+    // }
+
+    tauri::Builder::default()
+        // .plugin( // Temporarily commented out
         // log_builder
-            // .level(log::LevelFilter::Debug) 
-            // .build()
-    // )
-    .invoke_handler(tauri::generate_handler![
-        make_http_request,
-        search_videos
-        // 如果您有其他 command，请在此处添加，用逗号分隔
-        // e.g., another_command, yet_another_command
-    ])
-    .setup(|_app| {
-      // 可以在这里执行应用启动时的设置代码
-      Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+        // .level(log::LevelFilter::Debug)
+        // .build()
+        // )
+        .invoke_handler(tauri::generate_handler![
+            make_http_request,
+            search_videos // 如果您有其他 command，请在此处添加，用逗号分隔
+                          // e.g., another_command, yet_another_command
+        ])
+        .setup(|_app| {
+            // 可以在这里执行应用启动时的设置代码
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
