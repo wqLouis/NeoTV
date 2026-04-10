@@ -111,7 +111,3 @@ NeoTV/
 
 - Desktop (Windows, macOS, Linux)
 - Android (APK)
-
-## License
-
-MIT
