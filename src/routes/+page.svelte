@@ -1,18 +1,18 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import {
 		fetchDoubanChart,
 		fetchDoubanTVByTag,
 		fetchDoubanTags,
-		getCachedImageUrl
+		type DoubanSubject
 	} from '$lib/api/douban';
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
+	import CachedImage from '$lib/components/CachedImage.svelte';
 
 	let movieTags = $state<string[]>([]);
 	let tvTags = $state<string[]>([]);
@@ -20,60 +20,30 @@
 	let doubanSwitch = $state<'movie' | 'tv'>('movie');
 	let loading = $state(false);
 	let loadingMore = $state(false);
-	let charts = $state<
-		Array<{
-			id: string;
-			title: string;
-			cover: string;
-			cover_url?: string;
-			rate: string;
-			score?: string;
-			region?: string[];
-			regions?: string[];
-			types?: string[];
-			director?: string[];
-			actors?: string[];
-		}>
-	>([]);
+	let charts = $state<DoubanSubject[]>([]);
 	let pageStart = $state(0);
-	const PAGE_SIZE = 20;
 	let loadMoreTrigger: HTMLDivElement | null = $state(null);
-	let initialized = $state(false);
-	let selectedVideo: (typeof charts)[0] | null = $state(null);
+	let selectedVideo: DoubanSubject | null = $state(null);
 	let showSourceOverlay = $state(false);
 	let selectedCardRect: DOMRect | null = $state(null);
-	let cardRefs: Map<string, HTMLDivElement> = $state(new Map());
 	let observer: IntersectionObserver | null = null;
-	let imageUrlCache: Map<string, string> = $state(new Map());
 
-	const genres = Object.keys(DOUBAN_CHART_GENRE_IDS);
-	const movieGenres = genres;
-	const tvGenres = [
-		'剧情',
-		'喜剧',
-		'动作',
-		'爱情',
-		'科幻',
-		'动画',
-		'悬疑',
-		'惊悚',
-		'恐怖',
-		'古装',
-		'家庭',
-		'犯罪'
-	];
+	const PAGE_SIZE = 20;
+	const TV_TAGS_FALLBACK = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
+
+	onMount(() => {
+		loadTags();
+		loadCharts();
+		tick().then(setupObserver);
+	});
 
 	async function loadTags() {
-		const genreKeys = Object.keys(DOUBAN_CHART_GENRE_IDS);
-		movieTags = genreKeys;
+		movieTags = Object.keys(DOUBAN_CHART_GENRE_IDS);
 		try {
-			const tvTagsFromApi = await fetchDoubanTags('tv');
-			tvTags =
-				tvTagsFromApi.length > 0
-					? tvTagsFromApi
-					: ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
+			const tags = await fetchDoubanTags('tv');
+			tvTags = tags.length > 0 ? tags : TV_TAGS_FALLBACK;
 		} catch {
-			tvTags = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
+			tvTags = TV_TAGS_FALLBACK;
 		}
 	}
 
@@ -86,37 +56,26 @@
 		}
 
 		try {
-			let data;
-			if (doubanSwitch === 'tv') {
-				data = await fetchDoubanTVByTag(selectedGenre, {
-					page_start: pageStart,
-					page_limit: PAGE_SIZE
-				});
-			} else {
-				data = await fetchDoubanChart(selectedGenre, {
-					start: pageStart,
-					limit: PAGE_SIZE
-				});
-			}
+			const data =
+				doubanSwitch === 'tv'
+					? await fetchDoubanTVByTag(selectedGenre, {
+							page_start: pageStart,
+							page_limit: PAGE_SIZE
+						})
+					: await fetchDoubanChart(selectedGenre, { start: pageStart, limit: PAGE_SIZE });
 
-			if (reset) {
-				charts = data;
-			} else {
-				charts = [...charts, ...data];
-			}
+			charts = reset ? data : [...charts, ...data];
 			pageStart += data.length;
 		} catch (e) {
 			console.error('Failed to load charts:', e);
 		} finally {
 			loading = false;
 			loadingMore = false;
-			tick().then(() => {
-				setupObserver();
-			});
+			tick().then(setupObserver);
 		}
 	}
 
-	function handleVideoClick(item: (typeof charts)[0], event: MouseEvent | KeyboardEvent) {
+	function handleVideoClick(item: DoubanSubject, event: MouseEvent | KeyboardEvent) {
 		const target = event.currentTarget as HTMLDivElement;
 		selectedCardRect = target.getBoundingClientRect();
 		selectedVideo = item;
@@ -125,7 +84,7 @@
 
 	function handleGenreChange(tag: string) {
 		selectedGenre = tag;
-		loadCharts(true);
+		loadCharts();
 	}
 
 	function handleTabChange(value: string) {
@@ -134,13 +93,12 @@
 			selectedGenre = tvTags[0] || '热门';
 		}
 		doubanSwitch = newSwitch;
-		loadCharts(true);
+		loadCharts();
 	}
 
 	function setupObserver() {
-		if (observer) {
-			observer.disconnect();
-		}
+		observer?.disconnect();
+		if (!loadMoreTrigger) return;
 		observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0].isIntersecting && !loading && !loadingMore) {
@@ -149,38 +107,13 @@
 			},
 			{ rootMargin: '0px', threshold: 0 }
 		);
-		if (loadMoreTrigger) {
-			observer.observe(loadMoreTrigger);
-		}
-	}
-
-	onMount(() => {
-		loadTags();
-		loadCharts(true);
-		initialized = true;
-		tick().then(() => {
-			setupObserver();
-		});
-	});
-
-	onDestroy(() => {
-		if (observer) {
-			observer.disconnect();
-		}
-	});
-
-	function getCoverUrl(item: (typeof charts)[0]): string {
-		const url = item.cover_url || item.cover || '';
-		if (!url) return '';
-		if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-		if (url.startsWith('/')) return url;
-		return `/api/proxy?url=${encodeURIComponent(url)}`;
+		observer.observe(loadMoreTrigger);
 	}
 </script>
 
 <div class="mx-auto py-4">
 	<div
-		class="sticky top-0 z-30 mb-4 w-full border-b bg-background/90 px-4 pt-2 pb-4 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
+		class="sticky top-0 z-30 mb-4 border-b bg-background/90 px-4 pt-2 pb-4 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
 	>
 		<Tabs value={doubanSwitch} onValueChange={handleTabChange} class="mb-4">
 			<TabsList>
@@ -226,24 +159,15 @@
 					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e)}
 				>
 					<div class="relative aspect-2/3 w-full overflow-hidden">
-						<img
-							src={getCoverUrl(item)}
+						<CachedImage
+							src={item.cover_url || item.cover}
 							alt={item.title}
 							class="h-full w-full object-cover"
-							loading="lazy"
-							onerror={(e) => {
-								const img = e.currentTarget as HTMLImageElement;
-								img.src = 'https://via.placeholder.com/300x450?text=无封面';
-								img.classList.add('object-contain');
-							}}
+							referer="https://movie.douban.com/"
 						/>
-						{#if item.score}
+						{#if item.score || item.rate}
 							<Badge class="absolute top-1.5 right-1.5 bg-yellow-500 text-xs text-black">
-								{item.score}
-							</Badge>
-						{:else if item.rate}
-							<Badge class="absolute top-1.5 right-1.5 bg-yellow-500 text-xs text-black">
-								{item.rate}
+								{item.score || item.rate}
 							</Badge>
 						{/if}
 					</div>
@@ -251,7 +175,7 @@
 						<h3 class="line-clamp-2 text-xs font-medium" title={item.title}>
 							{item.title}
 						</h3>
-						{#if item.types && item.types.length > 0}
+						{#if item.types?.length}
 							<p class="text-xs text-muted-foreground">
 								{item.types.slice(0, 2).join(' / ')}
 							</p>

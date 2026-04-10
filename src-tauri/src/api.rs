@@ -1,7 +1,6 @@
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpRequestOptions {
@@ -26,22 +25,12 @@ pub struct HttpError {
 }
 
 pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> {
-    let log_path = crate::logging::get_log_path();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let log_line = format!("[{}][{}][{}] http_request called: {} {:?}",
-        timestamp, "DEBUG", "API", options.url, options.method);
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-    {
-        let _ = writeln!(file, "{}", log_line);
-    }
-    eprintln!("{}", log_line);
+    eprintln!("[{}][DEBUG][API] http_request called: {} {:?}", timestamp, options.url, options.method);
 
     let client_builder = reqwest::Client::builder();
 
@@ -116,13 +105,6 @@ pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, H
                 Ok(text_body) => {
                     let success_msg = format!("http_request successful! status={}, body_len={}", status, text_body.len());
                     eprintln!("[API] {}", success_msg);
-                    if let Ok(mut file) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&log_path)
-                    {
-                        let _ = writeln!(file, "[{}][{}][{}] {}", timestamp, "DEBUG", "API", success_msg);
-                    }
                     Ok(HttpResponse {
                         status,
                         headers: resp_headers,
@@ -147,36 +129,5 @@ pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, H
                 details: Some(e.to_string()),
             })
         }
-    }
-}
-
-pub async fn fetch_douban_chart(genre_id: u32, start: u32, limit: u32) -> Result<String, String> {
-    let url = format!(
-        "https://movie.douban.com/j/chart/top_list?type={}&interval_id=100:90&action=&start={}&limit={}",
-        genre_id, start, limit
-    );
-
-    let mut headers = HashMap::new();
-    headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string());
-    headers.insert("Referer".to_string(), "https://movie.douban.com/".to_string());
-    headers.insert("Accept".to_string(), "application/json".to_string());
-
-    let options = HttpRequestOptions {
-        url,
-        method: Some("GET".to_string()),
-        headers: Some(headers),
-        body: None,
-        timeout_secs: Some(15),
-    };
-
-    match http_request(options).await {
-        Ok(resp) => {
-            if resp.status == 200 {
-                Ok(resp.body)
-            } else {
-                Err(format!("HTTP error: {}", resp.status))
-            }
-        }
-        Err(e) => Err(e.error),
     }
 }

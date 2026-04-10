@@ -2,12 +2,22 @@
 	import { goto } from '$app/navigation';
 	import type { SearchResult } from '$lib/api/search';
 	import { Badge } from '$lib/components/ui/badge';
+	import { fetchImage } from '$lib/cache';
 
 	interface Props {
 		item: SearchResult;
 	}
 
 	let { item } = $props();
+	let imageSrc = $state('');
+
+	$effect(() => {
+		if (item.vod_pic && item.vod_pic.startsWith('http')) {
+			fetchImage(item.vod_pic).then((src) => {
+				imageSrc = src;
+			});
+		}
+	});
 
 	function handleClick() {
 		const params = new URLSearchParams({
@@ -16,17 +26,6 @@
 			title: item.vod_name
 		});
 		goto(`/player?${params.toString()}`);
-	}
-
-	function hasCover(): boolean {
-		return !!(item.vod_pic && item.vod_pic.startsWith('http'));
-	}
-
-	function getProxyUrl(url: string): string {
-		if (!url) return '';
-		if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-		if (url.startsWith('/')) return url;
-		return `/api/proxy?url=${encodeURIComponent(url)}`;
 	}
 </script>
 
@@ -37,10 +36,10 @@
 	tabindex="0"
 	onkeydown={(e) => e.key === 'Enter' && handleClick()}
 >
-	{#if hasCover()}
+	{#if item.vod_pic && item.vod_pic.startsWith('http')}
 		<div class="relative aspect-[2/3] w-full overflow-hidden">
 			<img
-				src={getProxyUrl(item.vod_pic)}
+				src={imageSrc || item.vod_pic}
 				alt={item.vod_name}
 				class="h-full w-full object-cover transition-transform hover:scale-110"
 				loading="lazy"

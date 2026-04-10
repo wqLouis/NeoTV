@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import { onMount } from 'svelte';
-	import { Home, Search, History, Settings } from 'lucide-svelte';
+	import { Home, Search, History, Heart, Settings } from 'lucide-svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import './layout.css';
@@ -12,10 +12,11 @@
 
 	let { children } = $props();
 
-	const navItems = [
+	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
+	const lowerNav = [
 		{ href: '/', label: '首页', icon: Home },
-		{ href: '/search', label: '搜索', icon: Search },
 		{ href: '/history', label: '历史', icon: History },
+		{ href: '/favourites', label: '收藏', icon: Heart },
 		{ href: '/settings', label: '设置', icon: Settings }
 	];
 
@@ -33,21 +34,46 @@
 
 <div class="flex h-screen">
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card">
-		<div class="flex flex-1 flex-col items-center justify-center gap-2 py-4">
-			{#each navItems as item (item.href)}
-				{@const active = isActive(item.href, page.url.pathname)}
-				<a
-					href={item.href}
-					tabindex="0"
-					class="flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-4 transition-all
-						{active
-						? 'bg-primary/10 text-primary ring-2 ring-primary'
-						: 'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'}"
-				>
-					<item.icon class="h-7 w-7" />
-					<span class="text-sm">{item.label}</span>
-				</a>
-			{/each}
+		<div class="flex flex-1 flex-col items-center justify-center gap-2">
+			<div class="flex flex-col items-center gap-2 py-2">
+				{#each upperNav as item (item.href)}
+					{@const active = isActive(item.href, page.url.pathname)}
+					<a
+						href={item.href}
+						class="flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
+							{active
+							? 'bg-primary/10 text-primary'
+							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+					>
+						<item.icon class="h-7 w-7" />
+						{#if active}
+							<span class="text-xs">{item.label}</span>
+						{/if}
+					</a>
+				{/each}
+			</div>
+
+			<div class="flex-1"></div>
+
+			<div class="flex flex-col items-center gap-2 py-2">
+				{#each lowerNav as item (item.href)}
+					{@const active = isActive(item.href, page.url.pathname)}
+					<a
+						href={item.href}
+						class="group flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
+							{active
+							? 'bg-primary/10 text-primary'
+							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+					>
+						<item.icon
+							class="h-7 w-7 transition-transform duration-200 {active ? 'scale-110' : 'scale-100'}"
+						/>
+						{#if active}
+							<span class="text-xs">{item.label}</span>
+						{/if}
+					</a>
+				{/each}
+			</div>
 		</div>
 	</nav>
 

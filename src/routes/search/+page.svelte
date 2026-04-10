@@ -6,6 +6,7 @@
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import VideoCard from '$lib/components/VideoCard.svelte';
+	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -81,7 +82,8 @@
 					q,
 					settingsStore.selectedApis,
 					settingsStore.customApis,
-					settingsStore.yellowFilterEnabled
+					settingsStore.yellowFilterEnabled,
+					settingsStore.commentaryFilterEnabled
 				);
 			} catch (e) {
 				console.error('Search failed:', e);
@@ -128,13 +130,6 @@
 		if (hasSearched && searchMode === 'douban') {
 			handleSearch('');
 		}
-	}
-
-	function getCoverUrl(item: DoubanSubject): string {
-		if (item.cover_url) {
-			return `/api/proxy?url=${encodeURIComponent(item.cover_url)}`;
-		}
-		return item.cover || '';
 	}
 
 	$effect(() => {
@@ -314,16 +309,11 @@
 					}}
 				>
 					<div class="relative aspect-[2/3] w-full overflow-hidden">
-						<img
-							src={getCoverUrl(item)}
+						<CachedImage
+							src={item.cover_url || item.cover}
 							alt={item.title}
 							class="h-full w-full object-cover"
-							loading="lazy"
-							onerror={(e) => {
-								const img = e.currentTarget as HTMLImageElement;
-								img.src = 'https://via.placeholder.com/300x450?text=无封面';
-								img.classList.add('object-contain');
-							}}
+							referer="https://movie.douban.com/"
 						/>
 						{#if item.score}
 							<Badge class="absolute top-1.5 right-1.5 bg-yellow-500 text-xs text-black">

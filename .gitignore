@@ -36,3 +36,15 @@ dist
 
 # ide
 .opencode
+
+# Android
+src-tauri/gen/android/
+src-tauri/target/
+
+# Build artifacts
+*.apk*
+*.aab
+scripts/release-key.jks
+
+# cache
+image_cache

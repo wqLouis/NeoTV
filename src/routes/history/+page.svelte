@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Play, Trash2, Clock } from 'lucide-svelte';
 
 	function formatTime(timestamp: number): string {
@@ -77,7 +78,7 @@
 					<CardContent class="p-4">
 						<div class="flex gap-4">
 							{#if item.cover}
-								<img
+								<CachedImage
 									src={item.cover}
 									alt={item.title}
 									class="h-28 w-20 flex-shrink-0 rounded-md object-cover"

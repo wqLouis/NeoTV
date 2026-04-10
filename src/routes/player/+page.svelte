@@ -7,12 +7,9 @@
 	import { historyStore } from '$lib/stores/history.svelte';
 	import { parsePlayUrl, getVideoDetail, type VideoDetail } from '$lib/api/search';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
-	import EpisodeList from '$lib/components/EpisodeList.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import { ArrowLeft, Maximize, Copy, Lock, Unlock, AlertCircle, ChevronDown } from 'lucide-svelte';
+	import { ArrowLeft, Lock, Unlock, AlertCircle } from 'lucide-svelte';
 
-	let videoUrl = $state('');
 	let title = $state('');
 	let cover = $state('');
 	let episodes = $state<{ episode: string; url: string }[]>([]);
@@ -22,50 +19,55 @@
 	let controlsLocked = $state(false);
 	let autoplayEnabled = $state(true);
 	let videoDetail = $state<VideoDetail | null>(null);
-	let showControls = $state(true);
-	let showEpisodes = $state(false);
 	let containerEl: HTMLDivElement;
 
 	let playerType: 'native' | 'hls' = $state('native');
 	let playerSrc: string = $state('');
 
-	async function setImmersive(enabled: boolean) {
-		try {
-			await invoke('plugin:immersiveandroid|set_immersive_android', { enabled });
-		} catch (e) {
-			console.warn('Failed to set immersive mode:', e);
-		}
+	interface AvailableSource {
+		source_code: string;
+		vod_id: string;
+		vod_name: string;
+		source_name: string;
+		vod_pic?: string;
 	}
+	let availableSources = $state<AvailableSource[]>([]);
+	let currentSourceIndex = $state(0);
 
 	async function processVideoUrl(url: string): Promise<{ type: 'native' | 'hls'; url: string }> {
-		const isM3U8 = url.toLowerCase().includes('.m3u8') || url.includes('m3u8');
+		const urlClean = url.split('$$$')[0].split('#')[0].trim();
+		const isM3U8 = urlClean.toLowerCase().includes('.m3u8') || urlClean.includes('m3u8');
+		console.log('[Player] processVideoUrl called:', { originalUrl: url, url: urlClean, isM3U8 });
 
 		if (!isM3U8) {
-			return { type: 'native', url };
+			console.log('[Player] Not M3U8, using native player');
+			return { type: 'native', url: urlClean };
 		}
 
 		try {
-			console.log('[Player] Processing M3U8 URL:', url);
+			console.log('[Player] Calling Rust fetch_media_url...');
 			const result = await invoke<{
 				url: string;
 				content_type: string;
 				is_m3u8: boolean;
 				processed_content: string | null;
-			}>('fetch_media_url', { url });
+			}>('fetch_media_url', { url: urlClean, adFiltering: settingsStore.adFilteringEnabled });
+
+			console.log('[Player] Rust response:', {
+				url: result.url,
+				content_type: result.content_type,
+				is_m3u8: result.is_m3u8,
+				hasProcessedContent: !!result.processed_content
+			});
 
 			if (result.processed_content) {
-				console.log('[Player] M3U8 content processed, creating Blob URL');
-				const blob = new Blob([result.processed_content], {
-					type: 'application/vnd.apple.mpegurl'
-				});
-				const blobUrl = URL.createObjectURL(blob);
-				return { type: 'native', url: blobUrl };
+				return { type: 'hls', url: result.url };
 			}
 
-			return { type: 'native', url: result.url };
+			return { type: 'hls', url: result.url };
 		} catch (e) {
 			console.warn('[Player] Rust failed to process M3U8, using hls.js fallback:', e);
-			return { type: 'hls', url };
+			return { type: 'hls', url: urlClean };
 		}
 	}
 
@@ -75,7 +77,6 @@
 		const source = params.get('source');
 		const directUrl = params.get('url');
 		const epIdx = params.get('episodeIndex');
-		const pos = params.get('position');
 
 		title = params.get('title') || '视频播放';
 		cover = params.get('cover') || '';
@@ -126,18 +127,33 @@
 	}
 
 	onMount(async () => {
-		await setImmersive(true);
 		autoplayEnabled = settingsStore.autoplayEnabled;
+		const storedSources = sessionStorage.getItem('availableSources');
+		if (storedSources) {
+			try {
+				availableSources = JSON.parse(storedSources);
+			} catch {
+				availableSources = [];
+			}
+		}
 		await loadVideoDetail();
+		try {
+			await invoke('set_immersive_android', { enabled: true });
+		} catch (e) {
+			console.log('[Player] Immersive mode not available:', e);
+		}
 	});
 
-	onDestroy(() => {
-		setImmersive(false);
+	onDestroy(async () => {
+		try {
+			await invoke('set_immersive_android', { enabled: false });
+		} catch (e) {
+			console.log('[Player] Failed to disable immersive mode:', e);
+		}
 	});
 
 	async function handleEpisodeSelect(episode: { episode: string; url: string }, index: number) {
 		currentEpisodeIndex = index;
-		showEpisodes = false;
 		loading = true;
 
 		const processed = await processVideoUrl(episode.url);
@@ -158,12 +174,61 @@
 		loading = false;
 	}
 
+	async function handleSourceChange(source: {
+		source_code: string;
+		vod_id?: string;
+		vod_name?: string;
+	}) {
+		const vodId = source.vod_id;
+		const sourceCode = source.source_code;
+		if (!vodId) return;
+
+		const idx = availableSources.findIndex((s) => s.source_code === sourceCode);
+		if (idx === -1) return;
+		currentSourceIndex = idx;
+		loading = true;
+
+		try {
+			const detail = await getVideoDetail(vodId, sourceCode);
+			if (detail?.list?.[0]) {
+				videoDetail = detail;
+				const video = detail.list[0];
+				const parsedEpisodes = parsePlayUrl(video.vod_play_url);
+				episodes = parsedEpisodes;
+				currentEpisodeIndex = 0;
+				if (episodes.length > 0) {
+					const processed = await processVideoUrl(episodes[0].url);
+					playerSrc = processed.url;
+					playerType = processed.type;
+				} else {
+					error = '该视频暂无播放地址';
+				}
+				historyStore.add({
+					id: vodId,
+					title: video.vod_name,
+					source: sourceCode,
+					cover: video.vod_pic,
+					episode: episodes[0]?.episode || '第1集',
+					episodeIndex: 0,
+					position: 0,
+					duration: 0
+				});
+			} else {
+				error = '无法获取视频详情';
+			}
+		} catch (e) {
+			console.error('Failed to load source:', e);
+			error = '切换源失败';
+		}
+
+		loading = false;
+	}
+
 	function toggleControlsLock() {
 		controlsLocked = !controlsLocked;
 	}
 
 	async function goBack() {
-		await setImmersive(false);
 		if (window.history.length > 1) {
 			window.history.back();
 		} else {
@@ -171,27 +236,13 @@
 		}
 	}
 
-	function copyUrl() {
-		navigator.clipboard.writeText(playerSrc || videoUrl);
-	}
-
-	function toggleFullscreen() {
-		if (containerEl) {
-			if (document.fullscreenElement) {
-				document.exitFullscreen();
-			} else {
-				containerEl.requestFullscreen();
-			}
-		}
-	}
-
-	function handleTimeUpdate(currentTime: number, duration: number) {
+	function handleTimeUpdate(currentTime: number, dur: number) {
 		historyStore.updatePosition(
 			$page.url.searchParams.get('id') || '',
 			$page.url.searchParams.get('source') || '',
 			episodes[currentEpisodeIndex]?.episode,
 			currentTime,
-			duration
+			dur
 		);
 	}
 
@@ -203,7 +254,7 @@
 	}
 
 	function handlePlayerError(errorMsg: string) {
-		console.error('[Player] Video player error:', errorMsg);
+		console.error('[Player] handlePlayerError called:', errorMsg);
 		error = '视频播放失败';
 	}
 </script>
@@ -225,97 +276,17 @@
 			type={playerType}
 			autoplay={autoplayEnabled}
 			poster={cover}
+			{episodes}
+			{currentEpisodeIndex}
+			showFullscreenButton={false}
+			onEpisodeChange={handleEpisodeSelect}
 			onTimeUpdate={handleTimeUpdate}
 			onEnded={handleEnded}
 			onError={handlePlayerError}
-		>
-			{#snippet topControls()}
-				<div class="flex items-start justify-between">
-					<div class="flex items-center gap-3">
-						<Button
-							variant="ghost"
-							size="icon"
-							onclick={goBack}
-							class="text-white hover:bg-white/20"
-						>
-							<ArrowLeft class="h-6 w-6" />
-						</Button>
-						<div class="flex flex-col">
-							<h1 class="text-lg font-semibold text-white">{title}</h1>
-							{#if episodes.length > 0}
-								<span class="text-sm text-white/70"
-									>第 {currentEpisodeIndex + 1} / {episodes.length} 集</span
-								>
-							{/if}
-						</div>
-					</div>
-					<div class="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="icon"
-							onclick={toggleControlsLock}
-							class="text-white hover:bg-white/20"
-						>
-							{#if controlsLocked}
-								<Lock class="h-5 w-5" />
-							{:else}
-								<Unlock class="h-5 w-5" />
-							{/if}
-						</Button>
-					</div>
-				</div>
-			{/snippet}
-
-			{#snippet bottomControls()}
-				{#if episodes.length > 0 && !controlsLocked}
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={(e) => {
-							e.stopPropagation();
-							showEpisodes = !showEpisodes;
-						}}
-						class="border-white/50 text-white hover:bg-white/20"
-					>
-						选集
-						<ChevronDown class="ml-1 h-4 w-4 {showEpisodes ? 'rotate-180' : ''}" />
-					</Button>
-				{/if}
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={(e) => {
-						e.stopPropagation();
-						copyUrl();
-					}}
-					class="border-white/50 text-white hover:bg-white/20"
-				>
-					<Copy class="mr-1 h-4 w-4" />
-					复制链接
-				</Button>
-			{/snippet}
-		</VideoPlayer>
-
-		{#if showEpisodes && episodes.length > 0 && !controlsLocked}
-			<div
-				class="absolute top-1/2 right-4 left-4 max-h-80 -translate-y-1/2 overflow-y-auto rounded-lg bg-black/90 p-4"
-				role="dialog"
-				onclick={(e) => e.stopPropagation()}
-			>
-				<div class="mb-3 flex items-center justify-between">
-					<span class="text-sm font-medium text-white">选集</span>
-					<Badge variant="secondary" class="bg-white/20 text-white"
-						>当前: {currentEpisodeIndex + 1}</Badge
-					>
-				</div>
-				<EpisodeList
-					{episodes}
-					currentIndex={currentEpisodeIndex}
-					reversed={settingsStore.episodesReversed}
-					onSelect={handleEpisodeSelect}
-				/>
-			</div>
-		{/if}
+			onReturn={goBack}
+			{availableSources}
+			onSourceChange={handleSourceChange}
+		/>
 	{:else}
 		<div class="absolute inset-0 flex flex-col items-center justify-center text-white">
 			<p>暂无视频源</p>

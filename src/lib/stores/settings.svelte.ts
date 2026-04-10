@@ -13,6 +13,8 @@ export interface Settings {
 	autoplayEnabled: boolean;
 	episodesReversed: boolean;
 	gridDensity: GridDensity;
+	commentaryFilterEnabled: boolean;
+	autoIntegrateSources: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -24,7 +26,9 @@ const DEFAULT_SETTINGS: Settings = {
 	adFilteringEnabled: true,
 	autoplayEnabled: true,
 	episodesReversed: false,
-	gridDensity: 'standard'
+	gridDensity: 'standard',
+	commentaryFilterEnabled: true,
+	autoIntegrateSources: true
 };
 
 export const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
@@ -81,6 +85,12 @@ function createSettingsStore() {
 		get gridDensity() {
 			return settings.gridDensity;
 		},
+		get commentaryFilterEnabled() {
+			return settings.commentaryFilterEnabled;
+		},
+		get autoIntegrateSources() {
+			return settings.autoIntegrateSources;
+		},
 		setSelectedApis(apis: string[]) {
 			settings.selectedApis = apis;
 			save();
@@ -128,6 +138,14 @@ function createSettingsStore() {
 		},
 		setGridDensity(density: GridDensity) {
 			settings.gridDensity = density;
+			save();
+		},
+		setCommentaryFilterEnabled(enabled: boolean) {
+			settings.commentaryFilterEnabled = enabled;
+			save();
+		},
+		setAutoIntegrateSources(enabled: boolean) {
+			settings.autoIntegrateSources = enabled;
 			save();
 		},
 		exportConfig(): string {

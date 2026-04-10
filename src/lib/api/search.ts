@@ -12,12 +12,6 @@ export interface SearchResult {
 	source_code: string;
 }
 
-export interface SearchResponse {
-	list: SearchResult[];
-	total: number;
-	pagecount?: number;
-}
-
 export interface VideoDetail {
 	list: {
 		vod_id: string;
@@ -31,35 +25,23 @@ export interface VideoDetail {
 	}[];
 }
 
-function getHeaders() {
-	return {
-		'User-Agent':
-			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-		Accept: 'application/json'
-	};
-}
-
 async function fetchFromApi(
 	url: string,
 	timeout = 8000
 ): Promise<{ status: number; body: string }> {
+	const headers = {
+		'User-Agent': 'Mozilla/5.0 Chrome/122.0.0.0 Safari/537.36',
+		Accept: 'application/json'
+	};
+
 	try {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-		const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, {
-			signal: controller.signal,
-			headers: getHeaders()
+		const { invoke } = await import('@tauri-apps/api/core');
+		const result = await invoke<{ status: number; body: string }>('make_http_request', {
+			options: { url, method: 'GET', headers, timeout_secs: timeout / 1000 }
 		});
-
-		clearTimeout(timeoutId);
-		const body = await response.text();
-		return { status: response.status, body };
-	} catch (error) {
-		if (error instanceof Error && error.name === 'AbortError') {
-			return { status: 408, body: 'Request timeout' };
-		}
-		return { status: 500, body: String(error) };
+		return result;
+	} catch {
+		return { status: 500, body: 'Tauri invoke failed' };
 	}
 }
 
@@ -83,53 +65,41 @@ async function searchSingleSource(
 
 	const searchUrl = apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(query);
 	const result = await fetchFromApi(searchUrl);
-
-	if (result.status < 200 || result.status >= 300) {
-		return [];
-	}
+	if (result.status < 200 || result.status >= 300) return [];
 
 	try {
 		const data = JSON.parse(result.body);
-		if (!data || !Array.isArray(data.list)) return [];
+		if (!data?.list?.length) return [];
 
 		const pageCount = data.pagecount || 1;
-		const pagesToFetch = Math.min(pageCount - 1, API_CONFIG.search.maxPages - 1);
-		let results = data.list.map((item: Record<string, unknown>) => ({
+		const maxPages = Math.min(pageCount - 1, API_CONFIG.search.maxPages - 1);
+
+		let results: SearchResult[] = data.list.map((item: Record<string, unknown>) => ({
 			...item,
 			source_name: apiName,
 			source_code: apiKey
 		}));
 
-		if (pagesToFetch > 0) {
-			const pagePromises: Promise<SearchResult[]>[] = [];
-			for (let page = 2; page <= pagesToFetch + 1; page++) {
-				const pageUrl =
-					apiBaseUrl +
-					API_CONFIG.search.pagePath
-						.replace('{query}', encodeURIComponent(query))
-						.replace('{page}', page.toString());
-				pagePromises.push(
-					fetchFromApi(pageUrl)
-						.then((pageResult) => {
-							if (pageResult.status < 200 || pageResult.status >= 300) return [];
-							try {
-								const pageData = JSON.parse(pageResult.body);
-								if (!pageData || !Array.isArray(pageData.list)) return [];
-								return pageData.list.map((item: Record<string, unknown>) => ({
-									...item,
-									source_name: apiName,
-									source_code: apiKey
-								}));
-							} catch {
-								return [];
-							}
-						})
-						.catch(() => [])
-				);
-			}
-			const pageResults = await Promise.all(pagePromises);
-			for (const pageResult of pageResults) {
-				results = results.concat(pageResult);
+		for (let page = 2; page <= maxPages + 1; page++) {
+			const pageUrl =
+				apiBaseUrl +
+				API_CONFIG.search.pagePath
+					.replace('{query}', encodeURIComponent(query))
+					.replace('{page}', String(page));
+			const pageResult = await fetchFromApi(pageUrl);
+			if (pageResult.status >= 200 && pageResult.status < 300) {
+				try {
+					const pageData = JSON.parse(pageResult.body);
+					if (pageData?.list?.length) {
+						results = results.concat(
+							pageData.list.map((item: Record<string, unknown>) => ({
+								...item,
+								source_name: apiName,
+								source_code: apiKey
+							}))
+						);
+					}
+				} catch {}
 			}
 		}
 
@@ -143,33 +113,35 @@ export async function search(
 	query: string,
 	selectedApis: string[],
 	customApis: ApiSite[],
-	yellowFilterEnabled: boolean
+	yellowFilterEnabled: boolean,
+	commentaryFilterEnabled: boolean = false
 ): Promise<SearchResult[]> {
-	const searchPromises: Promise<SearchResult[]>[] = [];
+	if (!query.trim() && selectedApis.length === 0) return [];
 
-	for (const apiKey of selectedApis) {
-		let customApi: ApiSite | undefined;
-		if (apiKey.startsWith('custom_')) {
-			const idx = parseInt(apiKey.replace('custom_', ''), 10);
-			customApi = customApis[idx];
-		}
-		searchPromises.push(searchSingleSource(query, apiKey, customApi));
-	}
+	const results = await Promise.all(
+		selectedApis.map((apiKey) => {
+			const customApi = apiKey.startsWith('custom_')
+				? customApis[parseInt(apiKey.replace('custom_', ''), 10)]
+				: undefined;
+			return searchSingleSource(query, apiKey, customApi);
+		})
+	);
 
-	const resultsArray = await Promise.all(searchPromises);
-	let allResults: SearchResult[] = [];
-
-	for (const results of resultsArray) {
-		if (Array.isArray(results) && results.length > 0) {
-			allResults = allResults.concat(results);
-		}
-	}
+	let allResults = results.flat();
 
 	if (yellowFilterEnabled) {
 		const { YELLOW_FILTER_BANNED } = await import('./constants');
 		allResults = allResults.filter((item) => {
 			const typeName = item.type_name || '';
 			return !YELLOW_FILTER_BANNED.some((keyword) => typeName.includes(keyword));
+		});
+	}
+
+	if (commentaryFilterEnabled) {
+		allResults = allResults.filter((item) => {
+			const remarks = item.vod_remarks || '';
+			const typeName = item.type_name || '';
+			return !remarks.includes('解说') && !typeName.includes('解说');
 		});
 	}
 
@@ -181,21 +153,6 @@ export async function getVideoDetail(
 	sourceCode: string,
 	customApiUrl?: string
 ): Promise<VideoDetail | null> {
-	const invoke = window.__TAURI__?.tauri?.invoke;
-	if (invoke) {
-		try {
-			const result = await invoke<string>('get_video_detail', {
-				videoId: id,
-				sourceId: sourceCode,
-				customApiUrl: customApiUrl || null
-			});
-			return JSON.parse(result);
-		} catch (e) {
-			console.error('Failed to get video detail via Tauri:', e);
-			return null;
-		}
-	}
-
 	let apiBaseUrl: string;
 
 	if (sourceCode === 'custom' && customApiUrl) {
@@ -208,10 +165,7 @@ export async function getVideoDetail(
 
 	const detailUrl = apiBaseUrl + API_CONFIG.detail.path + encodeURIComponent(id);
 	const result = await fetchFromApi(detailUrl);
-
-	if (result.status < 200 || result.status >= 300) {
-		return null;
-	}
+	if (result.status < 200 || result.status >= 300) return null;
 
 	try {
 		return JSON.parse(result.body);
@@ -221,18 +175,12 @@ export async function getVideoDetail(
 }
 
 export function parsePlayUrl(vodPlayUrl: string): { episode: string; url: string }[] {
-	const episodes: { episode: string; url: string }[] = [];
-	if (!vodPlayUrl) return episodes;
-
-	const sources = vodPlayUrl.split('$$$');
-	for (const source of sources) {
+	if (!vodPlayUrl) return [];
+	return vodPlayUrl.split('#').reduce<{ episode: string; url: string }[]>((eps, source) => {
 		const parts = source.split('$');
 		if (parts.length >= 2) {
-			episodes.push({
-				episode: parts[0],
-				url: parts.slice(1).join('$')
-			});
+			eps.push({ episode: parts[0], url: parts.slice(1).join('$') });
 		}
-	}
-	return episodes;
+		return eps;
+	}, []);
 }

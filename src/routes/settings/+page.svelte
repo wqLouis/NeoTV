@@ -31,7 +31,12 @@
 		adult?: boolean;
 	}
 
-	let cacheStats = $state<{ count: number; size_bytes: number } | null>(null);
+	let cacheStats = $state<{
+		mem_count: number;
+		mem_size: number;
+		disk_count: number;
+		disk_size: number;
+	} | null>(null);
 
 	async function loadCacheStats() {
 		try {
@@ -70,6 +75,18 @@
 
 	function toggleApi(key: string) {
 		settingsStore.toggleApi(key);
+	}
+
+	function selectAllApis() {
+		const allKeys = builtinApis.map((e) => e.key);
+		settingsStore.setSelectedApis(allKeys);
+	}
+
+	function reverseSelectApis() {
+		const allKeys = builtinApis.map((e) => e.key);
+		const currentSelected = settingsStore.selectedApis;
+		const newSelection = allKeys.filter((key) => !currentSelected.includes(key));
+		settingsStore.setSelectedApis(newSelection);
 	}
 
 	let newCustomName = $state('');
@@ -135,10 +152,9 @@
 		isOptimizing = true;
 
 		try {
-			const results = await testAllSourcesSpeed(
-				settingsStore.selectedApis,
-				settingsStore.customApis
-			);
+			const allBuiltinKeys = builtinApis.map((e) => e.key);
+
+			const results = await testAllSourcesSpeed(allBuiltinKeys, settingsStore.customApis);
 
 			const successResults = results.filter((r) => r.status === 'success');
 			const failedResults = results.filter((r) => r.status !== 'success');
@@ -224,7 +240,13 @@
 				<CardTitle>API 源选择</CardTitle>
 			</CardHeader>
 			<CardContent class="space-y-4">
-				<p class="text-sm text-muted-foreground">选择要使用的视频源，至少选择一个</p>
+				<div class="flex items-center justify-between">
+					<p class="text-sm text-muted-foreground">选择要使用的视频源，至少选择一个</p>
+					<div class="flex gap-2">
+						<Button variant="ghost" size="sm" onclick={selectAllApis}>全选</Button>
+						<Button variant="ghost" size="sm" onclick={reverseSelectApis}>反选</Button>
+					</div>
+				</div>
 				<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
 					{#each builtinApis as entry (entry.key)}
 						<button
@@ -494,6 +516,17 @@
 				<Separator />
 				<div class="flex items-center justify-between">
 					<div>
+						<Label>解说过滤</Label>
+						<p class="text-sm text-muted-foreground">自动过滤解说、电影解说等视频</p>
+					</div>
+					<Switch
+						checked={settingsStore.commentaryFilterEnabled}
+						onCheckedChange={(v: boolean) => settingsStore.setCommentaryFilterEnabled(v)}
+					/>
+				</div>
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
 						<Label>广告过滤</Label>
 						<p class="text-sm text-muted-foreground">过滤视频播放中的广告片段</p>
 					</div>
@@ -531,6 +564,17 @@
 						onCheckedChange={(v: boolean) => settingsStore.setAutoplayEnabled(v)}
 					/>
 				</div>
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>自动整合源</Label>
+						<p class="text-sm text-muted-foreground">后台测试所有源，自动选择可播放的</p>
+					</div>
+					<Switch
+						checked={settingsStore.autoIntegrateSources}
+						onCheckedChange={(v: boolean) => settingsStore.setAutoIntegrateSources(v)}
+					/>
+				</div>
 			</CardContent>
 		</Card>
 
@@ -543,9 +587,12 @@
 					<div>
 						<Label>图片缓存</Label>
 						<p class="text-sm text-muted-foreground">
-							{cacheStats
-								? `已缓存 ${cacheStats.count} 张图片 (${formatSize(cacheStats.size_bytes)})`
-								: '加载中...'}
+							{#if cacheStats}
+								内存: {cacheStats.mem_count} 项 ({formatSize(cacheStats.mem_size)}) | 磁盘: {cacheStats.disk_count}
+								项 ({formatSize(cacheStats.disk_size)})
+							{:else}
+								加载中...
+							{/if}
 						</p>
 					</div>
 					<Button variant="outline" size="sm" onclick={clearCache}>清除缓存</Button>
