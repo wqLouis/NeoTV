@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { search, type SearchResult } from '$lib/api/search';
 	import { searchDouban, type DoubanSubject } from '$lib/api/douban';
-	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
 	import { searchHistoryStore } from '$lib/stores/search.svelte';
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import SearchBar from '$lib/components/SearchBar.svelte';
@@ -62,18 +62,20 @@
 	];
 
 	async function handleSearch(q: string) {
-		if (!q.trim() && !selectedGenre && !selectedCountry) return;
+		if (!q.trim() && !selectedGenre && !selectedCountry && searchMode === 'api') return;
 
 		loading = true;
 		hasSearched = true;
 
 		if (searchMode === 'api') {
-			if (settingsStore.selectedApis.length === 0) {
+			if (q.trim() && settingsStore.selectedApis.length === 0) {
 				alert('请至少选择一个API源');
 				loading = false;
 				return;
 			}
-			searchHistoryStore.add(q);
+			if (q.trim()) {
+				searchHistoryStore.add(q);
+			}
 			try {
 				apiResults = await search(
 					q,
@@ -219,7 +221,7 @@
 		{/if}
 	</div>
 
-	{#if searchMode === 'api' && !hasSearched}
+	{#if !hasSearched && searchMode === 'api'}
 		{#if searchHistoryStore.items.length > 0}
 			<div class="mb-6">
 				<div class="mb-3 flex items-center justify-between">
@@ -258,8 +260,8 @@
 			<p>输入关键词搜索视频</p>
 		</div>
 	{:else if loading}
-		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-			{#each Array(16) as _}
+		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
+			{#each Array(20) as _}
 				<div class="space-y-2">
 					<Skeleton class="aspect-[2/3] w-full rounded-lg" />
 					<Skeleton class="h-4 w-3/4" />
@@ -273,7 +275,7 @@
 			<Badge variant="secondary">{apiResults.length}</Badge>
 			<span class="text-sm text-muted-foreground">个结果</span>
 		</div>
-		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each apiResults as item (item.vod_id + item.source_code)}
 				<VideoCard {item} />
 			{/each}
@@ -284,7 +286,7 @@
 			<Badge variant="secondary">{doubanResults.length}</Badge>
 			<span class="text-sm text-muted-foreground">个结果</span>
 		</div>
-		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each doubanResults as item (item.id)}
 				<div
 					class="cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
@@ -342,7 +344,7 @@
 				</div>
 			{/each}
 		</div>
-	{:else}
+	{:else if hasSearched}
 		<div class="py-12 text-center text-muted-foreground">
 			<p>没有找到匹配的结果</p>
 			<p class="mt-2 text-sm">请尝试其他关键词或更换数据源</p>

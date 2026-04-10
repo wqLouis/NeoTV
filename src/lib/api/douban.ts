@@ -30,7 +30,7 @@ interface DoubanResponse {
 }
 
 const DOUBAN_API_CACHE_DURATION_MS = 10 * 60 * 1000;
-const IMAGE_CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
+const IMAGE_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const USER_AGENTS = [
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -44,51 +44,111 @@ function getRandomUserAgent() {
 	return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-async function fetchImageAsBase64(url: string): Promise<string | null> {
-	const cacheKey = `img_cache_${btoa(url).replace(/[/+=]/g, '_')}`;
+const imageMemoryCache = new Map<string, string>();
 
-	if (typeof sessionStorage !== 'undefined') {
+export function clearImageCache() {
+	imageMemoryCache.clear();
+	if (typeof localStorage !== 'undefined') {
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith('img_')) {
+				keysToRemove.push(key);
+			}
+		}
+		keysToRemove.forEach((key) => localStorage.removeItem(key));
+	}
+}
+
+export function getImageCacheSize(): number {
+	return imageMemoryCache.size;
+}
+
+export async function getCachedImageUrl(url: string): Promise<string> {
+	if (!url) return '';
+
+	const cacheKey = `img_${btoa(url).replace(/[/+=]/g, '_')}`;
+
+	if (imageMemoryCache.has(cacheKey)) {
+		return imageMemoryCache.get(cacheKey)!;
+	}
+
+	if (typeof localStorage !== 'undefined') {
 		try {
-			const cached = sessionStorage.getItem(cacheKey);
+			const cached = localStorage.getItem(cacheKey);
 			if (cached) {
 				const { data, timestamp } = JSON.parse(cached);
 				if (Date.now() - timestamp < IMAGE_CACHE_DURATION_MS) {
+					imageMemoryCache.set(cacheKey, data);
 					return data;
 				}
+				localStorage.removeItem(cacheKey);
 			}
 		} catch {
-			sessionStorage.removeItem(cacheKey);
+			localStorage.removeItem(cacheKey);
+		}
+	}
+
+	const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
+	if (isTauri) {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			console.log('[getCachedImageUrl] Calling Rust cache_fetch_image for:', url.slice(0, 50));
+			const dataUrl = await invoke<string>('cache_fetch_image', { url });
+			console.log('[getCachedImageUrl] Rust returned:', dataUrl.length, 'chars');
+			imageMemoryCache.set(cacheKey, dataUrl);
+			return dataUrl;
+		} catch (e) {
+			console.warn('[getCachedImageUrl] Tauri invoke failed:', e);
+			console.log('[getCachedImageUrl] Falling back to proxy');
 		}
 	}
 
 	try {
-		const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+		const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+		const response = await fetch(proxyUrl);
 		if (response.ok) {
 			const buffer = await response.arrayBuffer();
 			const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
 			const mimeType = response.headers.get('content-type') || 'image/jpeg';
 			const dataUrl = `data:${mimeType};base64,${base64}`;
 
-			if (typeof sessionStorage !== 'undefined') {
+			imageMemoryCache.set(cacheKey, dataUrl);
+
+			if (typeof localStorage !== 'undefined') {
 				try {
-					sessionStorage.setItem(
-						cacheKey,
-						JSON.stringify({ data: dataUrl, timestamp: Date.now() })
-					);
+					localStorage.setItem(cacheKey, JSON.stringify({ data: dataUrl, timestamp: Date.now() }));
 				} catch {
-					// Cache full
+					// localStorage full
 				}
 			}
 			return dataUrl;
 		}
 	} catch {
-		// Failed to fetch
+		// Failed
 	}
-	return null;
+	return url;
 }
 
 async function fetchDoubanData(url: string): Promise<DoubanResponse> {
+	// Log to Rust file at function entry
+	console.log('[fetchDoubanData] Function called with URL:', url);
+	if (typeof window !== 'undefined' && '__TAURI__' in window) {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			await invoke('tauri_write_log', {
+				level: 'INFO',
+				tag: 'JS',
+				msg: `fetchDoubanData called: ${url}`
+			});
+		} catch (e) {
+			console.warn('Failed to write log:', e);
+		}
+	}
+
 	const cacheKey = `douban_api_cache_${url}`;
+	console.log('[fetchDoubanData] Cache key:', cacheKey);
 
 	if (typeof sessionStorage !== 'undefined') {
 		try {
@@ -106,20 +166,67 @@ async function fetchDoubanData(url: string): Promise<DoubanResponse> {
 		}
 	}
 
-	const maxRetries = 5;
-	const initialDelay = 1500;
+	const maxRetries = 3;
+	const initialDelay = 1000;
+
+	console.log('[fetchDoubanData] Starting fetch loop, maxRetries:', maxRetries);
+
+	const headers = {
+		'User-Agent': getRandomUserAgent(),
+		Referer: 'https://movie.douban.com/',
+		Accept: 'application/json, text/plain, */*',
+		'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+	};
 
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		console.log('[fetchDoubanData] Attempt:', attempt);
 		try {
-			const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, {
-				headers: {
-					'User-Agent': getRandomUserAgent(),
-					Referer: 'https://movie.douban.com/',
-					Accept: 'application/json, text/plain, */*',
-					'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-					'X-Requested-With': 'XMLHttpRequest'
+			const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+			console.log('[fetchDoubanData] isTauri:', isTauri);
+
+			let response: Response;
+
+			if (isTauri) {
+				try {
+					const { invoke } = await import('@tauri-apps/api/core');
+					await invoke('tauri_write_log', {
+						level: 'DEBUG',
+						tag: 'JS',
+						msg: `Calling make_http_request: ${url}`
+					});
+					console.log('[fetchDoubanData] Calling Rust make_http_request for:', url);
+					const result = await invoke<{
+						status: number;
+						headers: Record<string, string>;
+						body: string;
+					}>('make_http_request', {
+						options: { url, method: 'GET', headers, timeout_secs: 15 }
+					});
+					await invoke('tauri_write_log', {
+						level: 'DEBUG',
+						tag: 'JS',
+						msg: `Rust returned status: ${result.status}, body_len: ${result.body.length}`
+					});
+					console.log(
+						'[fetchDoubanData] Rust returned:',
+						result.status,
+						result.body.length,
+						'bytes'
+					);
+					response = new Response(result.body, { status: result.status });
+				} catch (e) {
+					await invoke('tauri_write_log', {
+						level: 'WARN',
+						tag: 'JS',
+						msg: `Tauri invoke failed: ${e}`
+					});
+					console.warn('[fetchDoubanData] Tauri invoke failed:', e);
+					console.log('[fetchDoubanData] Falling back to direct fetch');
+					response = await fetch(url, { headers });
 				}
-			});
+			} else {
+				response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { headers });
+			}
 
 			if (response.status >= 200 && response.status < 300) {
 				const jsonData = await response.json();
@@ -148,13 +255,14 @@ async function fetchDoubanData(url: string): Promise<DoubanResponse> {
 
 			if (attempt < maxRetries) {
 				await new Promise((resolve) =>
-					setTimeout(resolve, Math.min(initialDelay * Math.pow(2, attempt), 15000))
+					setTimeout(resolve, Math.min(initialDelay * Math.pow(2, attempt), 5000))
 				);
 			}
-		} catch {
+		} catch (e) {
+			console.warn(`[fetchDoubanData] Attempt ${attempt} failed:`, e);
 			if (attempt < maxRetries) {
 				await new Promise((resolve) =>
-					setTimeout(resolve, Math.min(initialDelay * Math.pow(2, attempt), 15000))
+					setTimeout(resolve, Math.min(initialDelay * Math.pow(2, attempt), 5000))
 				);
 			}
 		}
@@ -223,4 +331,41 @@ export async function searchDouban(params: {
 	const url = `${DOUBAN_NEW_SEARCH_API_BASE}?${queryParams.toString()}`;
 	const data = await fetchDoubanData(url);
 	return data.subjects || [];
+}
+
+export async function fetchDoubanTVByTag(
+	tag: string,
+	params: { sort?: string; page_limit?: number; page_start?: number } = {}
+): Promise<DoubanSubject[]> {
+	const queryParams = new URLSearchParams();
+	queryParams.append('type', 'tv');
+	queryParams.append('tag', tag);
+	if (params.sort) queryParams.append('sort', params.sort);
+	queryParams.append('page_limit', (params.page_limit || 20).toString());
+	queryParams.append('page_start', (params.page_start || 0).toString());
+
+	const url = `https://movie.douban.com/j/search_subjects?${queryParams.toString()}`;
+	const data = await fetchDoubanData(url);
+
+	let subjects = [];
+	if (data && typeof data === 'object' && 'subjects' in data) {
+		subjects = (data as { subjects: DoubanSubject[] }).subjects;
+	} else if (Array.isArray(data)) {
+		subjects = data;
+	}
+
+	return subjects.map((item) => ({
+		id: item.id || item.url?.split('/subject/')[1]?.replace('/', '') || '',
+		title: item.title || '',
+		cover: item.cover || item.cover_url || '',
+		cover_url: item.cover_url || item.cover || '',
+		rate: item.rate || item.score || '',
+		score: item.score || item.rate || '',
+		region: item.regions || item.region || [],
+		regions: item.regions || item.region || [],
+		types: item.types && item.types.length > 0 ? item.types : [tag],
+		director: item.directors || [],
+		actors: item.casts || [],
+		url: item.url || ''
+	}));
 }

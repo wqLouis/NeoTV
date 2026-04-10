@@ -10,4 +10,16 @@ declare global {
 	}
 }
 
+interface TauriWindow {
+	__TAURI__?: {
+		tauri?: {
+			invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+		};
+	};
+}
+
+declare global {
+	interface Window extends TauriWindow {}
+}
+
 export {};

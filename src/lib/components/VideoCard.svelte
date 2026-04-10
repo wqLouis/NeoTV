@@ -7,7 +7,7 @@
 		item: SearchResult;
 	}
 
-	let { item }: Props = $props();
+	let { item } = $props();
 
 	function handleClick() {
 		const params = new URLSearchParams({
@@ -21,10 +21,17 @@
 	function hasCover(): boolean {
 		return !!(item.vod_pic && item.vod_pic.startsWith('http'));
 	}
+
+	function getProxyUrl(url: string): string {
+		if (!url) return '';
+		if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+		if (url.startsWith('/')) return url;
+		return `/api/proxy?url=${encodeURIComponent(url)}`;
+	}
 </script>
 
 <div
-	class="card-hover h-full cursor-pointer overflow-hidden rounded-lg bg-card shadow-sm transition-all hover:scale-[1.02] hover:shadow-md"
+	class="card-hover h-full cursor-pointer overflow-hidden rounded-lg bg-card shadow-sm transition-all hover:scale-[1.02] hover:shadow-md focus-visible:scale-[1.02] focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-ring"
 	onclick={handleClick}
 	role="button"
 	tabindex="0"
@@ -33,7 +40,7 @@
 	{#if hasCover()}
 		<div class="relative aspect-[2/3] w-full overflow-hidden">
 			<img
-				src={item.vod_pic}
+				src={getProxyUrl(item.vod_pic)}
 				alt={item.vod_name}
 				class="h-full w-full object-cover transition-transform hover:scale-110"
 				loading="lazy"

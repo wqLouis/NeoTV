@@ -128,4 +128,19 @@
 	html {
 		@apply font-sans;
 	}
+
+	:focus-visible {
+		@apply ring-2 ring-ring ring-offset-2 ring-offset-background outline-none;
+	}
+
+	:focus:not(:focus-visible) {
+		outline: none;
+	}
+
+	a,
+	button,
+	[role='button'],
+	[tabindex='0'] {
+		@apply transition-all duration-150;
+	}
 }

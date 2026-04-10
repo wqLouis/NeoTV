@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 import type { ApiSite } from '$lib/api/constants';
 
+export type GridDensity = 'compact' | 'standard' | 'loose';
+
 export interface Settings {
 	selectedApis: string[];
 	customApis: ApiSite[];
@@ -10,6 +12,7 @@ export interface Settings {
 	adFilteringEnabled: boolean;
 	autoplayEnabled: boolean;
 	episodesReversed: boolean;
+	gridDensity: GridDensity;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -20,7 +23,14 @@ const DEFAULT_SETTINGS: Settings = {
 	yellowFilterEnabled: true,
 	adFilteringEnabled: true,
 	autoplayEnabled: true,
-	episodesReversed: false
+	episodesReversed: false,
+	gridDensity: 'standard'
+};
+
+export const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
+	compact: 'grid-cols-8 gap-8',
+	standard: 'grid-cols-6 gap-8',
+	loose: 'grid-cols-5 gap-8'
 };
 
 function createSettingsStore() {
@@ -68,6 +78,9 @@ function createSettingsStore() {
 		get episodesReversed() {
 			return settings.episodesReversed;
 		},
+		get gridDensity() {
+			return settings.gridDensity;
+		},
 		setSelectedApis(apis: string[]) {
 			settings.selectedApis = apis;
 			save();
@@ -113,6 +126,10 @@ function createSettingsStore() {
 			settings.episodesReversed = reversed;
 			save();
 		},
+		setGridDensity(density: GridDensity) {
+			settings.gridDensity = density;
+			save();
+		},
 		exportConfig(): string {
 			return JSON.stringify(
 				{
@@ -123,7 +140,8 @@ function createSettingsStore() {
 					yellowFilterEnabled: settings.yellowFilterEnabled,
 					adFilteringEnabled: settings.adFilteringEnabled,
 					autoplayEnabled: settings.autoplayEnabled,
-					episodesReversed: settings.episodesReversed
+					episodesReversed: settings.episodesReversed,
+					gridDensity: settings.gridDensity
 				},
 				null,
 				2

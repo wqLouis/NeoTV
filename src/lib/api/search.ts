@@ -181,6 +181,21 @@ export async function getVideoDetail(
 	sourceCode: string,
 	customApiUrl?: string
 ): Promise<VideoDetail | null> {
+	const invoke = window.__TAURI__?.tauri?.invoke;
+	if (invoke) {
+		try {
+			const result = await invoke<string>('get_video_detail', {
+				videoId: id,
+				sourceId: sourceCode,
+				customApiUrl: customApiUrl || null
+			});
+			return JSON.parse(result);
+		} catch (e) {
+			console.error('Failed to get video detail via Tauri:', e);
+			return null;
+		}
+	}
+
 	let apiBaseUrl: string;
 
 	if (sourceCode === 'custom' && customApiUrl) {

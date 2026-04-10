@@ -1,16 +1,25 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { fetchDoubanChart, fetchDoubanTags } from '$lib/api/douban';
+	import {
+		fetchDoubanChart,
+		fetchDoubanTVByTag,
+		fetchDoubanTags,
+		getCachedImageUrl
+	} from '$lib/api/douban';
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
+	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
+	import { onMount, onDestroy, tick } from 'svelte';
+	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 
 	let movieTags = $state<string[]>([]);
 	let tvTags = $state<string[]>([]);
 	let selectedGenre = $state('剧情');
 	let doubanSwitch = $state<'movie' | 'tv'>('movie');
 	let loading = $state(false);
+	let loadingMore = $state(false);
 	let charts = $state<
 		Array<{
 			id: string;
@@ -26,65 +35,154 @@
 			actors?: string[];
 		}>
 	>([]);
+	let pageStart = $state(0);
+	const PAGE_SIZE = 20;
+	let loadMoreTrigger: HTMLDivElement | null = $state(null);
+	let initialized = $state(false);
+	let selectedVideo: (typeof charts)[0] | null = $state(null);
+	let showSourceOverlay = $state(false);
+	let selectedCardRect: DOMRect | null = $state(null);
+	let cardRefs: Map<string, HTMLDivElement> = $state(new Map());
+	let observer: IntersectionObserver | null = null;
+	let imageUrlCache: Map<string, string> = $state(new Map());
 
 	const genres = Object.keys(DOUBAN_CHART_GENRE_IDS);
+	const movieGenres = genres;
+	const tvGenres = [
+		'剧情',
+		'喜剧',
+		'动作',
+		'爱情',
+		'科幻',
+		'动画',
+		'悬疑',
+		'惊悚',
+		'恐怖',
+		'古装',
+		'家庭',
+		'犯罪'
+	];
 
 	async function loadTags() {
-		const movie = await fetchDoubanTags('movie');
-		const tv = await fetchDoubanTags('tv');
-		const genreIds = Object.keys(DOUBAN_CHART_GENRE_IDS);
-		movieTags = movie.filter((t) => genreIds.includes(t));
-		if (movieTags.length === 0) {
-			movieTags = ['剧情', '喜剧', '动作', '爱情', '科幻', '动画', '悬疑', '惊悚', '恐怖'];
-		}
-		tvTags = tv.filter((t) => genreIds.includes(t));
-		if (tvTags.length === 0) {
-			tvTags = ['剧情', '喜剧', '动作', '爱情', '科幻', '动画', '悬疑', '惊悚', '恐怖'];
+		const genreKeys = Object.keys(DOUBAN_CHART_GENRE_IDS);
+		movieTags = genreKeys;
+		try {
+			const tvTagsFromApi = await fetchDoubanTags('tv');
+			tvTags =
+				tvTagsFromApi.length > 0
+					? tvTagsFromApi
+					: ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
+		} catch {
+			tvTags = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
 		}
 	}
 
-	async function loadCharts() {
-		loading = true;
+	async function loadCharts(reset = true) {
+		if (reset) {
+			loading = true;
+			pageStart = 0;
+		} else {
+			loadingMore = true;
+		}
+
 		try {
-			const data = await fetchDoubanChart(selectedGenre);
-			charts = data;
+			let data;
+			if (doubanSwitch === 'tv') {
+				data = await fetchDoubanTVByTag(selectedGenre, {
+					page_start: pageStart,
+					page_limit: PAGE_SIZE
+				});
+			} else {
+				data = await fetchDoubanChart(selectedGenre, {
+					start: pageStart,
+					limit: PAGE_SIZE
+				});
+			}
+
+			if (reset) {
+				charts = data;
+			} else {
+				charts = [...charts, ...data];
+			}
+			pageStart += data.length;
 		} catch (e) {
 			console.error('Failed to load charts:', e);
 		} finally {
 			loading = false;
+			loadingMore = false;
+			tick().then(() => {
+				setupObserver();
+			});
 		}
 	}
 
-	function handleVideoClick(item: (typeof charts)[0]) {
-		const coverUrl = item.cover_url || item.cover;
-		const params = new URLSearchParams({
-			id: item.id,
-			source: 'douban',
-			title: item.title,
-			cover: coverUrl || ''
-		});
-		goto(`/player?${params.toString()}`);
+	function handleVideoClick(item: (typeof charts)[0], event: MouseEvent | KeyboardEvent) {
+		const target = event.currentTarget as HTMLDivElement;
+		selectedCardRect = target.getBoundingClientRect();
+		selectedVideo = item;
+		showSourceOverlay = true;
 	}
 
-	$effect(() => {
+	function handleGenreChange(tag: string) {
+		selectedGenre = tag;
+		loadCharts(true);
+	}
+
+	function handleTabChange(value: string) {
+		const newSwitch = value as 'movie' | 'tv';
+		if (newSwitch === 'tv' && !tvTags.includes(selectedGenre)) {
+			selectedGenre = tvTags[0] || '热门';
+		}
+		doubanSwitch = newSwitch;
+		loadCharts(true);
+	}
+
+	function setupObserver() {
+		if (observer) {
+			observer.disconnect();
+		}
+		observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && !loading && !loadingMore) {
+					loadCharts(false);
+				}
+			},
+			{ rootMargin: '0px', threshold: 0 }
+		);
+		if (loadMoreTrigger) {
+			observer.observe(loadMoreTrigger);
+		}
+	}
+
+	onMount(() => {
 		loadTags();
+		loadCharts(true);
+		initialized = true;
+		tick().then(() => {
+			setupObserver();
+		});
 	});
 
-	$effect(() => {
-		loadCharts();
+	onDestroy(() => {
+		if (observer) {
+			observer.disconnect();
+		}
 	});
 
 	function getCoverUrl(item: (typeof charts)[0]): string {
-		if (item.cover_url) {
-			return `/api/proxy?url=${encodeURIComponent(item.cover_url)}`;
-		}
-		return item.cover || '';
+		const url = item.cover_url || item.cover || '';
+		if (!url) return '';
+		if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+		if (url.startsWith('/')) return url;
+		return `/api/proxy?url=${encodeURIComponent(url)}`;
 	}
 </script>
 
-<div class="container mx-auto px-4 py-4">
-	<div class="sticky top-14 z-30 mb-4 bg-background pt-2 pb-4">
-		<Tabs bind:value={doubanSwitch} class="mb-4">
+<div class="mx-auto py-4">
+	<div
+		class="sticky top-0 z-30 mb-4 w-full border-b bg-background/90 px-4 pt-2 pb-4 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
+	>
+		<Tabs value={doubanSwitch} onValueChange={handleTabChange} class="mb-4">
 			<TabsList>
 				<TabsTrigger value="movie">电影</TabsTrigger>
 				<TabsTrigger value="tv">电视剧</TabsTrigger>
@@ -99,7 +197,7 @@
 						{selectedGenre === tag
 						? 'bg-primary text-primary-foreground'
 						: 'bg-secondary hover:bg-secondary/80'}"
-					onclick={() => (selectedGenre = tag)}
+					onclick={() => handleGenreChange(tag)}
 				>
 					{tag}
 				</button>
@@ -108,26 +206,26 @@
 	</div>
 
 	{#if loading}
-		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-			{#each Array(16) as _}
+		<div class="grid px-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
+			{#each Array(settingsStore.gridDensity === 'compact' ? 30 : settingsStore.gridDensity === 'loose' ? 12 : 20) as _}
 				<div class="space-y-2">
-					<Skeleton class="aspect-[2/3] w-full rounded-lg" />
+					<Skeleton class="aspect-2/3 w-full rounded-lg" />
 					<Skeleton class="h-4 w-3/4" />
 					<Skeleton class="h-3 w-1/2" />
 				</div>
 			{/each}
 		</div>
 	{:else}
-		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+		<div class="grid px-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each charts as item (item.id)}
 				<div
-					class="cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
-					onclick={() => handleVideoClick(item)}
+					class="cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md focus-visible:scale-[1.02] focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-ring"
+					onclick={(e) => handleVideoClick(item, e)}
 					role="button"
 					tabindex="0"
-					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item)}
+					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e)}
 				>
-					<div class="relative aspect-[2/3] w-full overflow-hidden">
+					<div class="relative aspect-2/3 w-full overflow-hidden">
 						<img
 							src={getCoverUrl(item)}
 							alt={item.title}
@@ -168,8 +266,26 @@
 				<p>暂无数据</p>
 			</div>
 		{/if}
+
+		<div bind:this={loadMoreTrigger} class="py-4 text-center">
+			{#if loadingMore}
+				<div class="flex justify-center gap-2">
+					<div
+						class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
+					></div>
+					<span class="text-sm text-muted-foreground">加载更多...</span>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
+
+<VideoSourceOverlay
+	item={selectedVideo}
+	originRect={selectedCardRect}
+	bind:open={showSourceOverlay}
+	onOpenChange={(open) => (showSourceOverlay = open)}
+/>
 
 <style>
 	.scrollbar-hide::-webkit-scrollbar {

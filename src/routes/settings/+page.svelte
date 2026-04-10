@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { settingsStore } from '$lib/stores/settings.svelte';
+	import {
+		settingsStore,
+		GRID_DENSITY_CLASSES,
+		type GridDensity
+	} from '$lib/stores/settings.svelte';
 	import { API_SITES } from '$lib/api/constants';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -8,6 +12,16 @@
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { toast } from 'svelte-sonner';
+	import {
+		testSourceSpeed,
+		testAllSourcesSpeed,
+		formatLatency,
+		formatSpeed,
+		getSpeedLevel,
+		type SpeedTestResult
+	} from '$lib/utils/speedTest';
+	import { Gauge, Zap, XCircle, CheckCircle, Loader2 } from 'lucide-svelte';
 
 	interface BuiltinApiEntry {
 		key: string;
@@ -15,6 +29,34 @@
 		name: string;
 		detail?: string;
 		adult?: boolean;
+	}
+
+	let cacheStats = $state<{ count: number; size_bytes: number } | null>(null);
+
+	async function loadCacheStats() {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			cacheStats = await invoke('cache_stats');
+		} catch {
+			cacheStats = null;
+		}
+	}
+
+	function formatSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
+
+	async function clearCache() {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			await invoke('cache_clear');
+			toast.success('缓存已清除');
+			loadCacheStats();
+		} catch {
+			toast.error('清除缓存失败');
+		}
 	}
 
 	const builtinApis: BuiltinApiEntry[] = Object.entries(API_SITES).map(([key, site]) => ({
@@ -48,6 +90,82 @@
 		settingsStore.removeCustomApi(index);
 	}
 
+	let speedTestResults = $state<SpeedTestResult[]>([]);
+	let isTestingSpeed = $state(false);
+
+	async function runSpeedTest() {
+		if (isTestingSpeed) return;
+		isTestingSpeed = true;
+		speedTestResults = [];
+
+		try {
+			const allApis = [...settingsStore.selectedApis];
+			for (let i = 0; i < settingsStore.customApis.length; i++) {
+				allApis.push(`custom_${i}`);
+			}
+
+			if (allApis.length === 0) {
+				toast.warning('请先选择至少一个 API 源');
+				isTestingSpeed = false;
+				return;
+			}
+
+			const results = await testAllSourcesSpeed(
+				settingsStore.selectedApis,
+				settingsStore.customApis
+			);
+			results.sort((a, b) => {
+				if (a.status === 'success' && b.status !== 'success') return -1;
+				if (b.status === 'success' && a.status !== 'success') return 1;
+				return (a.latency_ms || Infinity) - (b.latency_ms || Infinity);
+			});
+			speedTestResults = results;
+			toast.success('测速完成');
+		} catch (e) {
+			toast.error('测速失败');
+		} finally {
+			isTestingSpeed = false;
+		}
+	}
+
+	let isOptimizing = $state(false);
+
+	async function optimizeSources() {
+		if (isOptimizing) return;
+		isOptimizing = true;
+
+		try {
+			const results = await testAllSourcesSpeed(
+				settingsStore.selectedApis,
+				settingsStore.customApis
+			);
+
+			const successResults = results.filter((r) => r.status === 'success');
+			const failedResults = results.filter((r) => r.status !== 'success');
+
+			successResults.sort((a, b) => (a.latency_ms || Infinity) - (b.latency_ms || Infinity));
+
+			const optimizedApis = successResults.map((r) => r.source_id);
+
+			settingsStore.setSelectedApis(optimizedApis);
+
+			const removedCount = failedResults.length;
+			const keptCount = successResults.length;
+
+			if (removedCount > 0) {
+				toast.success(`已优化：保留 ${keptCount} 个可用源，移除 ${removedCount} 个无效源`);
+			} else {
+				toast.success(`所有 ${keptCount} 个源均可正常使用`);
+			}
+
+			speedTestResults = results;
+		} catch (e) {
+			toast.error('优化失败');
+		} finally {
+			isOptimizing = false;
+		}
+	}
+
 	function exportConfig() {
 		const config = settingsStore.exportConfig();
 		const blob = new Blob([config], { type: 'application/json' });
@@ -77,6 +195,10 @@
 			alert('配置导入失败，请检查文件格式');
 		}
 	}
+
+	$effect(() => {
+		loadCacheStats();
+	});
 </script>
 
 <div class="container mx-auto px-4 py-6">
@@ -142,16 +264,15 @@
 					</div>
 					<div class="flex gap-2">
 						<Input placeholder="名称" bind:value={newCustomName} class="w-32" />
-						<Input placeholder="API 地址" bind:value={newCustomUrl} class="flex-grow" />
+						<Input placeholder="API 地址" bind:value={newCustomUrl} class="grow" />
 						<Button onclick={addCustomApi}>添加</Button>
 					</div>
 					{#if settingsStore.customApis.length > 0}
 						<div class="space-y-2">
 							{#each settingsStore.customApis as api, i}
 								<div class="flex items-center gap-2 rounded-md bg-secondary px-3 py-2">
-									<span class="flex-grow text-sm">{api.name}</span>
-									<span class="max-w-[200px] truncate text-xs text-muted-foreground">{api.api}</span
-									>
+									<span class="grow text-sm">{api.name}</span>
+									<span class="max-w-50 truncate text-xs text-muted-foreground">{api.api}</span>
 									<Button variant="ghost" size="icon" onclick={() => removeCustomApi(i)}>
 										<svg
 											class="h-4 w-4"
@@ -170,6 +291,96 @@
 						</div>
 					{/if}
 				</div>
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardHeader>
+				<div class="flex items-center justify-between">
+					<CardTitle>源测速</CardTitle>
+					<div class="flex gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={runSpeedTest}
+							disabled={isTestingSpeed || isOptimizing}
+						>
+							{#if isTestingSpeed}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								测速中...
+							{:else}
+								<Zap class="mr-2 h-4 w-4" />
+								开始测速
+							{/if}
+						</Button>
+						<Button
+							variant="default"
+							size="sm"
+							onclick={optimizeSources}
+							disabled={isTestingSpeed || isOptimizing}
+						>
+							{#if isOptimizing}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								优化中...
+							{:else}
+								<Zap class="mr-2 h-4 w-4" />
+								优化源
+							{/if}
+						</Button>
+					</div>
+				</div>
+			</CardHeader>
+			<CardContent class="space-y-3">
+				{#if speedTestResults.length > 0}
+					<div class="space-y-2">
+						{#each speedTestResults as result}
+							<div class="flex items-center justify-between rounded-md bg-secondary px-3 py-2">
+								<div class="flex items-center gap-3">
+									{#if result.status === 'success'}
+										<CheckCircle class="h-4 w-4 text-green-500" />
+									{:else}
+										<XCircle class="h-4 w-4 text-red-500" />
+									{/if}
+									<span class="text-sm font-medium">{result.source_name}</span>
+								</div>
+								<div class="flex items-center gap-4 text-sm">
+									{#if result.status === 'success'}
+										<div class="flex items-center gap-1">
+											<Gauge class="h-4 w-4 text-muted-foreground" />
+											<span
+												class={result.latency_ms < 500
+													? 'text-green-500'
+													: result.latency_ms < 1000
+														? 'text-yellow-500'
+														: 'text-red-500'}
+											>
+												{formatLatency(result.latency_ms)}
+											</span>
+										</div>
+										<div class="flex items-center gap-1">
+											<Zap class="h-4 w-4 text-muted-foreground" />
+											<span
+												class={getSpeedLevel(result.download_speed_kbps) === 'fast'
+													? 'text-green-500'
+													: getSpeedLevel(result.download_speed_kbps) === 'medium'
+														? 'text-yellow-500'
+														: 'text-red-500'}
+											>
+												{formatSpeed(result.download_speed_kbps)}
+											</span>
+										</div>
+									{:else}
+										<span class="text-xs text-muted-foreground">{result.error || '测速失败'}</span>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="py-4 text-center text-sm text-muted-foreground">
+						点击"开始测速"检测所有已选源的速度和延迟
+					</p>
+				{/if}
 			</CardContent>
 		</Card>
 
@@ -226,6 +437,30 @@
 						</svg>
 						<span class="text-sm">跟随系统</span>
 					</button>
+				</div>
+
+				<Separator />
+
+				<div>
+					<Label class="mb-3 block">每行显示数量</Label>
+					<div class="flex gap-2">
+						{#each ['compact', 'standard', 'loose'] as const as density}
+							<button
+								class="flex flex-1 flex-col items-center gap-1 rounded-lg border p-3 transition-colors
+									{settingsStore.gridDensity === density
+									? 'border-primary bg-primary/10'
+									: 'border-border hover:bg-accent'}"
+								onclick={() => settingsStore.setGridDensity(density)}
+							>
+								<span class="text-sm font-medium">
+									{density === 'compact' ? '紧凑' : density === 'standard' ? '标准' : '宽松'}
+								</span>
+								<span class="text-xs text-muted-foreground">
+									{density === 'compact' ? '8列' : density === 'standard' ? '6列' : '5列'}
+								</span>
+							</button>
+						{/each}
+					</div>
 				</div>
 			</CardContent>
 		</Card>
@@ -295,6 +530,25 @@
 						checked={settingsStore.autoplayEnabled}
 						onCheckedChange={(v: boolean) => settingsStore.setAutoplayEnabled(v)}
 					/>
+				</div>
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardHeader>
+				<CardTitle>缓存管理</CardTitle>
+			</CardHeader>
+			<CardContent class="space-y-4">
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>图片缓存</Label>
+						<p class="text-sm text-muted-foreground">
+							{cacheStats
+								? `已缓存 ${cacheStats.count} 张图片 (${formatSize(cacheStats.size_bytes)})`
+								: '加载中...'}
+						</p>
+					</div>
+					<Button variant="outline" size="sm" onclick={clearCache}>清除缓存</Button>
 				</div>
 			</CardContent>
 		</Card>

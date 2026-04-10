@@ -27,3 +27,6 @@ project.inlang/cache/
 
 # Rust analyzer generated
 target
+
+# svelte build
+dist
