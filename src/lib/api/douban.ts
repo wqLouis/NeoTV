@@ -108,6 +108,7 @@ export async function searchDouban(params: {
 	start?: number;
 	genres?: string;
 	countries?: string;
+	type?: 'movie' | 'tv';
 }): Promise<DoubanSubject[]> {
 	const query = new URLSearchParams();
 	if (params.sort) query.set('sort', params.sort);
@@ -116,6 +117,7 @@ export async function searchDouban(params: {
 	if (params.start) query.set('start', String(params.start));
 	if (params.genres) query.set('genres', params.genres);
 	if (params.countries) query.set('countries', params.countries);
+	if (params.type) query.set('type', params.type);
 
 	const data = await fetchDoubanData(`${DOUBAN_NEW_SEARCH_API_BASE}?${query}`);
 	return data.subjects || [];

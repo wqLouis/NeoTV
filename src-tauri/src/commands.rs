@@ -2,6 +2,7 @@ use crate::api::{self, HttpRequestOptions, HttpError};
 use crate::cache::{self, SpeedTestResult};
 use crate::config;
 use crate::m3u8;
+use crate::storage::{self, HistoryItem, FavouriteItem};
 use std::collections::HashMap;
 
 pub use crate::api::HttpResponse;
@@ -294,5 +295,52 @@ fn base64_encode(data: &[u8]) -> String {
         }
     }
     result
+}
+
+// History commands
+#[tauri::command]
+pub fn history_get_all(state: tauri::State<'_, storage::Storage>) -> Vec<HistoryItem> {
+    state.history_get_all()
+}
+
+#[tauri::command]
+pub fn history_add(item: HistoryItem, state: tauri::State<'_, storage::Storage>) {
+    state.history_add(item);
+}
+
+#[tauri::command]
+pub fn history_remove(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) {
+    state.history_remove(&id, &source, episode.as_deref());
+}
+
+#[tauri::command]
+pub fn history_clear(state: tauri::State<'_, storage::Storage>) {
+    state.history_clear();
+}
+
+// Favourites commands
+#[tauri::command]
+pub fn favourites_get_all(state: tauri::State<'_, storage::Storage>) -> Vec<FavouriteItem> {
+    state.favourites_get_all()
+}
+
+#[tauri::command]
+pub fn favourites_add(item: FavouriteItem, state: tauri::State<'_, storage::Storage>) {
+    state.favourites_add(item);
+}
+
+#[tauri::command]
+pub fn favourites_remove(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) {
+    state.favourites_remove(&id, &source, episode.as_deref());
+}
+
+#[tauri::command]
+pub fn favourites_has(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) -> bool {
+    state.favourites_has(&id, &source, episode.as_deref())
+}
+
+#[tauri::command]
+pub fn favourites_clear(state: tauri::State<'_, storage::Storage>) {
+    state.favourites_clear();
 }
 

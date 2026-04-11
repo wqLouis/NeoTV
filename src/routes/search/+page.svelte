@@ -16,6 +16,7 @@
 
 	type SearchMode = 'api' | 'douban';
 	type DoubanQuickFilter = 'hot' | 'new' | 'top';
+	type DoubanType = 'movie' | 'tv';
 
 	let query = $state('');
 	let searchMode = $state<SearchMode>('api');
@@ -31,6 +32,7 @@
 	let range = $state('0,10');
 	let selectedGenre = $state('');
 	let selectedCountry = $state('');
+	let selectedType = $state<DoubanType>('movie');
 	let doubanQuickFilter = $state<DoubanQuickFilter>('hot');
 
 	const genres = Object.keys(DOUBAN_CHART_GENRE_IDS);
@@ -105,7 +107,8 @@
 					sort: sortMap[doubanQuickFilter],
 					range: range,
 					tags: selectedGenre || undefined,
-					countries: selectedCountry || undefined
+					countries: selectedCountry || undefined,
+					type: selectedType
 				});
 			} catch (e) {
 				console.error('Search failed:', e);
@@ -178,6 +181,27 @@
 			<SearchBar bind:value={query} placeholder="搜索视频..." onSearch={handleSearch} />
 		{:else}
 			<div class="sticky top-14 z-30 bg-background pt-8 pb-4">
+				<div class="mb-3 flex gap-2">
+					<button
+						class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors
+							{selectedType === 'movie'
+							? 'bg-primary text-primary-foreground'
+							: 'bg-secondary hover:bg-secondary/80'}"
+						onclick={() => (selectedType = 'movie')}
+					>
+						电影
+					</button>
+					<button
+						class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors
+							{selectedType === 'tv'
+							? 'bg-primary text-primary-foreground'
+							: 'bg-secondary hover:bg-secondary/80'}"
+						onclick={() => (selectedType = 'tv')}
+					>
+						电视剧
+					</button>
+				</div>
+
 				<div class="scrollbar-hide mb-3 flex gap-2 overflow-x-auto pb-2">
 					{#each quickFilters as filter}
 						<button

@@ -181,7 +181,7 @@
 		playerSrc = processed.url;
 		playerType = processed.type;
 
-		historyStore.add({
+		await historyStore.add({
 			id: $page.url.searchParams.get('id') || '',
 			title,
 			source: $page.url.searchParams.get('source') || '',
@@ -224,7 +224,7 @@
 				} else {
 					error = '该视频暂无播放地址';
 				}
-				historyStore.add({
+				await historyStore.add({
 					id: vodId,
 					title: video.vod_name,
 					source: sourceCode,

@@ -1,4 +1,4 @@
-import { browser } from '$app/environment';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface HistoryItem {
 	id: string;
@@ -13,42 +13,47 @@ export interface HistoryItem {
 }
 
 function createHistoryStore() {
-	let history = $state<HistoryItem[]>(loadHistory());
+	let history = $state<HistoryItem[]>([]);
+	let initialized = $state(false);
 
-	function loadHistory(): HistoryItem[] {
-		if (!browser) return [];
-		const stored = localStorage.getItem('viewingHistory');
-		if (!stored) return [];
+	async function loadHistory() {
 		try {
-			return JSON.parse(stored);
-		} catch {
-			return [];
+			history = await invoke<HistoryItem[]>('history_get_all');
+		} catch (e) {
+			console.error('[History] Failed to load from Rust:', e);
+			history = [];
 		}
+		initialized = true;
 	}
 
-	function save() {
-		if (browser) {
-			localStorage.setItem('viewingHistory', JSON.stringify(history));
-		}
-	}
+	// Initial load
+	loadHistory();
 
 	return {
 		get items() {
 			return history;
 		},
-		add(item: Omit<HistoryItem, 'timestamp'>) {
-			const existing = history.findIndex(
-				(h) => h.id === item.id && h.source === item.source && h.episode === item.episode
-			);
-			const newItem: HistoryItem = { ...item, timestamp: Date.now() };
-			if (existing >= 0) {
-				history = history.map((h, i) => (i === existing ? newItem : h));
-			} else {
-				history = [newItem, ...history].slice(0, 100);
-			}
-			save();
+		get loaded() {
+			return initialized;
 		},
-		updatePosition(
+		async add(item: Omit<HistoryItem, 'timestamp'>) {
+			const newItem: HistoryItem = { ...item, timestamp: Date.now() };
+			try {
+				await invoke('history_add', { item: newItem });
+				// Update local state
+				const existingIdx = history.findIndex(
+					(h) => h.id === item.id && h.source === item.source && h.episode === item.episode
+				);
+				if (existingIdx >= 0) {
+					history = history.map((h, i) => (i === existingIdx ? newItem : h));
+				} else {
+					history = [newItem, ...history].slice(0, 100);
+				}
+			} catch (e) {
+				console.error('[History] Failed to add:', e);
+			}
+		},
+		async updatePosition(
 			id: string,
 			source: string,
 			episode: string | undefined,
@@ -59,21 +64,35 @@ function createHistoryStore() {
 				(h) => h.id === id && h.source === source && h.episode === episode
 			);
 			if (idx >= 0) {
-				history = history.map((h, i) =>
-					i === idx ? { ...h, position, duration, timestamp: Date.now() } : h
-				);
-				save();
+				const updatedItem = { ...history[idx], position, duration, timestamp: Date.now() };
+				try {
+					await invoke('history_add', { item: updatedItem });
+					history = history.map((h, i) => (i === idx ? updatedItem : h));
+				} catch (e) {
+					console.error('[History] Failed to update position:', e);
+				}
 			}
 		},
-		remove(id: string, source: string, episode?: string) {
-			history = history.filter(
-				(h) => !(h.id === id && h.source === source && h.episode === episode)
-			);
-			save();
+		async remove(id: string, source: string, episode?: string) {
+			try {
+				await invoke('history_remove', { id, source, episode: episode ?? null });
+				history = history.filter(
+					(h) => !(h.id === id && h.source === source && h.episode === episode)
+				);
+			} catch (e) {
+				console.error('[History] Failed to remove:', e);
+			}
 		},
-		clear() {
-			history = [];
-			save();
+		async clear() {
+			try {
+				await invoke('history_clear');
+				history = [];
+			} catch (e) {
+				console.error('[History] Failed to clear:', e);
+			}
+		},
+		async refresh() {
+			await loadHistory();
 		}
 	};
 }

@@ -4,9 +4,9 @@
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Card, CardContent } from '$lib/components/ui/card';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, Trash2, Heart } from 'lucide-svelte';
+	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
+	import { Trash2, Heart } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 
 	let selectedVideo: DoubanSubject | null = $state(null);
@@ -36,7 +36,8 @@
 		showSourceOverlay = true;
 	}
 
-	function handleRemove(item: FavouriteItem) {
+	function handleRemove(item: FavouriteItem, e: MouseEvent) {
+		e.stopPropagation();
 		favouritesStore.remove(item.id, item.source, item.episode);
 	}
 
@@ -63,57 +64,51 @@
 			<p class="mt-1 text-sm">在播放器中点击收藏按钮添加内容</p>
 		</div>
 	{:else}
-		<div class="space-y-3">
+		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each favouritesStore.items as item (item.id + item.source + item.episode)}
-				<Card
-					class="cursor-pointer transition-colors hover:bg-accent/50"
+				<div
+					class="group relative cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
 					onclick={(e) => handleVideoClick(item, e)}
+					role="button"
+					tabindex="0"
+					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e as unknown as MouseEvent)}
 				>
-					<CardContent class="p-4">
-						<div class="flex gap-4">
-							{#if item.cover}
-								<CachedImage
-									src={item.cover}
-									alt={item.title}
-									class="h-28 w-20 flex-shrink-0 rounded-md object-cover"
-								/>
-							{/if}
-							<div class="min-w-0 flex-grow">
-								<div class="flex items-start justify-between gap-2">
-									<div class="min-w-0">
-										<h3 class="line-clamp-1 font-semibold">{item.title}</h3>
-										<div class="mt-1 flex items-center gap-2">
-											<Badge variant="outline" class="text-xs">
-												{item.source}
-											</Badge>
-											{#if item.episode}
-												<Badge variant="secondary" class="text-xs">
-													{item.episode}
-												</Badge>
-											{/if}
-										</div>
-									</div>
-									<Button
-										variant="ghost"
-										size="icon"
-										onclick={(e) => {
-											e.stopPropagation();
-											handleRemove(item);
-										}}
-									>
-										<Heart class="h-4 w-4 fill-primary text-primary" />
-									</Button>
-								</div>
-
-								<div class="mt-3 flex items-center justify-between">
-									<span class="text-xs text-muted-foreground">
-										添加于 {formatRelativeTime(item.addedAt)}
-									</span>
-								</div>
+					<div class="relative aspect-[2/3] w-full overflow-hidden">
+						{#if item.cover}
+							<CachedImage
+								src={item.cover}
+								alt={item.title}
+								class="h-full w-full object-cover transition-transform group-hover:scale-110"
+							/>
+						{:else}
+							<div class="flex h-full w-full items-center justify-center bg-secondary">
+								<span class="text-muted-foreground">无封面</span>
 							</div>
+						{/if}
+						<button
+							class="absolute top-1.5 right-1.5 rounded-full bg-black/50 p-1.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+							onclick={(e) => handleRemove(item, e)}
+						>
+							<Heart class="h-4 w-4 fill-primary text-primary" />
+						</button>
+						{#if item.episode}
+							<Badge class="absolute bottom-1.5 left-1.5 bg-black/50 text-xs text-white">
+								{item.episode}
+							</Badge>
+						{/if}
+					</div>
+					<div class="p-2">
+						<h3 class="line-clamp-2 text-xs font-medium" title={item.title}>
+							{item.title}
+						</h3>
+						<div class="mt-1 flex items-center justify-between">
+							<span class="text-xs text-muted-foreground">{item.source}</span>
+							<span class="text-xs text-muted-foreground">
+								{formatRelativeTime(item.addedAt)}
+							</span>
 						</div>
-					</CardContent>
-				</Card>
+					</div>
+				</div>
 			{/each}
 		</div>
 	{/if}

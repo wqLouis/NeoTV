@@ -3,8 +3,13 @@ mod cache;
 mod commands;
 mod config;
 mod m3u8;
+mod storage;
+
+use std::fs;
+use tauri::Manager;
 
 pub use commands::*;
+pub use storage::{HistoryItem, FavouriteItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -116,9 +121,24 @@ pub fn run() {
             commands::fetch_media_url,
             commands::fetch_media_segment,
             commands::fetch_hls_m3u8,
-            commands::fetch_hls_segment
+            commands::fetch_hls_segment,
+            commands::history_get_all,
+            commands::history_add,
+            commands::history_remove,
+            commands::history_clear,
+            commands::favourites_get_all,
+            commands::favourites_add,
+            commands::favourites_remove,
+            commands::favourites_has,
+            commands::favourites_clear
         ])
-        .setup(move |_app| {
+        .setup(|app| {
+            let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+            let cache_dir = app_data_dir.join("cache");
+            fs::create_dir_all(&cache_dir).ok();
+            cache::init_cache_dir(cache_dir);
+            let storage = storage::Storage::new(app_data_dir);
+            app.manage(storage);
             eprintln!("[LibreTV] Tauri setup complete");
             Ok(())
         })

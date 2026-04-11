@@ -91,12 +91,20 @@ impl Default for LruCache {
 }
 
 static MEM_CACHE: OnceLock<Mutex<LruCache>> = OnceLock::new();
+static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn get_mem_cache() -> &'static Mutex<LruCache> {
     MEM_CACHE.get_or_init(|| Mutex::new(LruCache::new()))
 }
 
+pub fn init_cache_dir(dir: PathBuf) {
+    let _ = CACHE_DIR.set(dir);
+}
+
 fn get_cache_dir() -> PathBuf {
+    if let Some(dir) = CACHE_DIR.get() {
+        return dir.clone();
+    }
     let dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("libretv_cache");
