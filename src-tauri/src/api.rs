@@ -1,3 +1,4 @@
+use crate::error::HttpError;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -18,12 +19,6 @@ pub struct HttpResponse {
     pub body: String,
     #[serde(default)]
     pub cached: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HttpError {
-    pub error: String,
-    pub details: Option<String>,
 }
 
 pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> {

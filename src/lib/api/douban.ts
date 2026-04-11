@@ -123,6 +123,43 @@ export async function searchDouban(params: {
 	return data.subjects || [];
 }
 
+export async function searchSubjects(params: {
+	type: 'movie' | 'tv';
+	tag: string;
+	sort: 'recommend' | 'time' | 'rank';
+	page_limit?: number;
+	page_start?: number;
+}): Promise<DoubanSubject[]> {
+	const query = new URLSearchParams({
+		type: params.type,
+		tag: params.tag,
+		sort: params.sort,
+		page_limit: String(params.page_limit ?? 20),
+		page_start: String(params.page_start ?? 0)
+	});
+
+	const data = await fetchDoubanData(`https://movie.douban.com/j/search_subjects?${query}`);
+	const subjects: DoubanSubject[] = data?.subjects || [];
+
+	return subjects.map((item) => {
+		const raw = item as unknown as Record<string, unknown>;
+		return {
+			id: item.id || item.url?.split('/subject/')[1]?.replace('/', '') || '',
+			title: item.title || '',
+			cover: item.cover || item.cover_url || '',
+			cover_url: item.cover_url || item.cover || '',
+			rate: item.rate || item.score || '',
+			score: item.score || item.rate || '',
+			region: (raw.regions as string[]) || item.region || [],
+			regions: (raw.regions as string[]) || item.region || [],
+			types: item.types?.length ? item.types : [params.tag],
+			director: (raw.directors as string[]) || [],
+			actors: (raw.casts as string[]) || [],
+			url: item.url || ''
+		};
+	});
+}
+
 export async function fetchDoubanTVByTag(
 	tag: string,
 	{

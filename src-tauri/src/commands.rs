@@ -1,6 +1,7 @@
-use crate::api::{self, HttpRequestOptions, HttpError};
+use crate::api::{self, HttpRequestOptions};
 use crate::cache::{self, SpeedTestResult};
 use crate::config;
+use crate::error::HttpError;
 use crate::m3u8;
 use crate::storage::{self, HistoryItem, FavouriteItem};
 use std::collections::HashMap;
@@ -9,12 +10,11 @@ pub use crate::api::HttpResponse;
 
 #[tauri::command]
 pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> {
-    const CACHE_TTL_SECS: u64 = 600; // 10 minutes
-    const MAX_CACHE_SIZE: usize = 5 * 1024 * 1024; // 5MB
+    const CACHE_TTL_SECS: u64 = 600;
+    const MAX_CACHE_SIZE: usize = 5 * 1024 * 1024;
 
     let url = options.url.clone();
 
-    // 1. Check cache first for non-media content
     if let Some(cached) = cache::get_cached(&url, CACHE_TTL_SECS) {
         let body = match String::from_utf8(cached.data.clone()) {
             Ok(s) => s,
@@ -28,10 +28,8 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
         });
     }
 
-    // 2. Make the request
     let response = api::http_request(options).await?;
 
-    // 3. Cache if it's not a media type and size is acceptable
     let content_type = response.headers.get("content-type")
         .map(|h| h.as_str())
         .unwrap_or("");
@@ -71,10 +69,7 @@ pub async fn search_videos(
     custom_api_url: Option<String>,
 ) -> Result<String, HttpError> {
     let source_info = if source_id == "custom" {
-        let url = custom_api_url.ok_or_else(|| HttpError {
-            error: "Custom source selected but no API URL provided".to_string(),
-            details: None,
-        })?;
+        let url = custom_api_url.ok_or_else(|| HttpError::new("Custom source selected but no API URL provided"))?;
         config::ApiSourceInfo {
             api_base_url: url.clone(),
             name: "Custom".to_string(),
@@ -84,10 +79,7 @@ pub async fn search_videos(
             detail_path: None,
         }
     } else {
-        config::get_api_source(&source_id).ok_or_else(|| HttpError {
-            error: format!("Unknown source_id: {}", source_id),
-            details: None,
-        })?
+        config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?
     };
 
     let base_url = source_info.api_base_url.clone();
@@ -109,19 +101,13 @@ pub async fn search_videos(
     if resp.status >= 200 && resp.status < 300 {
         Ok(resp.body)
     } else {
-        Err(HttpError {
-            error: format!("API request failed: {}", resp.status),
-            details: Some(resp.body),
-        })
+        Err(HttpError::with_details(format!("API request failed: {}", resp.status), resp.body))
     }
 }
 
 #[tauri::command]
 pub async fn get_video_detail(video_id: String, source_id: String) -> Result<String, HttpError> {
-    let source_info = config::get_api_source(&source_id).ok_or_else(|| HttpError {
-        error: format!("Unknown source_id: {}", source_id),
-        details: None,
-    })?;
+    let source_info = config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?;
 
     let base_url = source_info.api_base_url.clone();
     let detail_path = source_info.detail_path.unwrap_or_else(|| "/api.php/provide/vod/?ac=videolist&ids=".to_string());
@@ -142,20 +128,19 @@ pub async fn get_video_detail(video_id: String, source_id: String) -> Result<Str
     if resp.status >= 200 && resp.status < 300 {
         Ok(resp.body)
     } else {
-        Err(HttpError {
-            error: format!("HTTP {}", resp.status),
-            details: Some(resp.body),
-        })
+        Err(HttpError::with_details(format!("HTTP {}", resp.status), resp.body))
     }
 }
 
 #[tauri::command]
-pub async fn fetch_media_url(url: String, ad_filtering: Option<bool>) -> Result<m3u8::MediaInfo, m3u8::HttpError> {
-    m3u8::fetch_and_process_m3u8(&url, ad_filtering.unwrap_or(true)).await
+pub async fn fetch_media_url(url: String, ad_filtering: Option<bool>) -> Result<m3u8::MediaInfo, String> {
+    m3u8::fetch_and_process_m3u8(&url, ad_filtering.unwrap_or(true))
+        .await
+        .map_err(|HttpError { error, .. }| error)
 }
 
 #[tauri::command]
-pub async fn fetch_media_segment(url: String) -> Result<Vec<u8>, m3u8::HttpError> {
+pub async fn fetch_media_segment(url: String) -> Result<Vec<u8>, HttpError> {
     let actual_url = if url.starts_with("app-media://") {
         url.strip_prefix("app-media://")
             .and_then(|e| urlencoding::decode(e).ok())
@@ -275,26 +260,7 @@ pub async fn test_source_speed(source_id: String, custom_url: Option<String>) ->
 }
 
 fn base64_encode(data: &[u8]) -> String {
-    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::new();
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as usize;
-        let b1 = chunk.get(1).copied().unwrap_or(0) as usize;
-        let b2 = chunk.get(2).copied().unwrap_or(0) as usize;
-        result.push(CHARS[b0 >> 2] as char);
-        result.push(CHARS[((b0 & 0x03) << 4) | (b1 >> 4)] as char);
-        if chunk.len() > 1 {
-            result.push(CHARS[((b1 & 0x0f) << 2) | (b2 >> 6)] as char);
-        } else {
-            result.push('=');
-        }
-        if chunk.len() > 2 {
-            result.push(CHARS[b2 & 0x3f] as char);
-        } else {
-            result.push('=');
-        }
-    }
-    result
+    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data)
 }
 
 // History commands
@@ -343,4 +309,3 @@ pub fn favourites_has(id: String, source: String, episode: Option<String>, state
 pub fn favourites_clear(state: tauri::State<'_, storage::Storage>) {
     state.favourites_clear();
 }
-

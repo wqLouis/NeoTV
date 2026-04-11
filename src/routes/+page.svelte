@@ -5,43 +5,43 @@
 	let selectedType = $state<'movie' | 'tv'>('movie');
 </script>
 
-<div class="flex h-full">
-	<aside
-		class="sticky top-0 z-30 flex h-fit w-40 flex-col gap-2 border-r bg-background/90 p-4 pt-8 backdrop-blur-2xl"
-	>
-		<button
-			class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors
-				{selectedType === 'movie'
-				? 'bg-primary/10 text-primary'
-				: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
-			onclick={() => (selectedType = 'movie')}
-		>
-			<Film class="h-5 w-5" />
-			<span class="font-medium">电影</span>
-		</button>
+<div class="h-full overflow-y-auto">
+	<div class="sticky top-0 z-30 border-b bg-background/90 px-4 pt-8 pb-3 backdrop-blur-2xl">
+		<div class="flex gap-4">
+			<button
+				class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors
+					{selectedType === 'movie'
+					? 'bg-primary text-primary-foreground'
+					: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
+				onclick={() => (selectedType = 'movie')}
+			>
+				<Film class="h-5 w-5" />
+				<span class="font-medium">电影</span>
+			</button>
 
-		<button
-			class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors
-				{selectedType === 'tv'
-				? 'bg-primary/10 text-primary'
-				: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
-			onclick={() => (selectedType = 'tv')}
-		>
-			<Tv class="h-5 w-5" />
-			<span class="font-medium">电视剧</span>
-		</button>
-	</aside>
+			<button
+				class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors
+					{selectedType === 'tv'
+					? 'bg-primary text-primary-foreground'
+					: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
+				onclick={() => (selectedType = 'tv')}
+			>
+				<Tv class="h-5 w-5" />
+				<span class="font-medium">电视剧</span>
+			</button>
+		</div>
+	</div>
 
-	<main class="flex-1 overflow-y-auto p-4">
+	<main class="p-4">
 		{#if selectedType === 'movie'}
 			<div class="space-y-10">
-				<HorizontalSection title="热门电影" type="movie" sort="T" />
-				<HorizontalSection title="最新电影" type="movie" sort="R" />
+				<HorizontalSection title="热门电影" type="movie" tag="热门" sort="recommend" />
+				<HorizontalSection title="最新电影" type="movie" tag="最新" sort="time" />
 			</div>
 		{:else}
 			<div class="space-y-10">
-				<HorizontalSection title="热门电视剧" type="tv" sort="T" />
-				<HorizontalSection title="最新电视剧" type="tv" sort="R" />
+				<HorizontalSection title="热门电视剧" type="tv" tag="热门" sort="recommend" />
+				<HorizontalSection title="最新电视剧" type="tv" tag="热门" sort="time" />
 			</div>
 		{/if}
 	</main>

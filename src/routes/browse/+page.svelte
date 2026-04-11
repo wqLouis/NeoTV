@@ -7,12 +7,11 @@
 	} from '$lib/api/douban';
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { onMount, tick } from 'svelte';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
-	import CachedImage from '$lib/components/CachedImage.svelte';
+	import DoubanCard from '$lib/components/DoubanCard.svelte';
 	import { page } from '$app/state';
 
 	let movieTags = $state<string[]>([]);
@@ -81,9 +80,8 @@
 		}
 	}
 
-	function handleVideoClick(item: DoubanSubject, event: MouseEvent | KeyboardEvent) {
-		const target = event.currentTarget as HTMLDivElement;
-		selectedCardRect = target.getBoundingClientRect();
+	function handleVideoClick(item: DoubanSubject, event: MouseEvent) {
+		selectedCardRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		selectedVideo = item;
 		showSourceOverlay = true;
 	}
@@ -157,37 +155,7 @@
 	{:else}
 		<div class="grid px-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each charts as item (item.id)}
-				<div
-					class="cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md focus-visible:scale-[1.02] focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-ring"
-					onclick={(e) => handleVideoClick(item, e)}
-					role="button"
-					tabindex="0"
-					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e)}
-				>
-					<div class="relative aspect-2/3 w-full overflow-hidden">
-						<CachedImage
-							src={item.cover_url || item.cover}
-							alt={item.title}
-							class="h-full w-full object-cover"
-							referer="https://movie.douban.com/"
-						/>
-						{#if item.score || item.rate}
-							<Badge class="absolute top-1.5 right-1.5 bg-yellow-500 text-xs text-black">
-								{item.score || item.rate}
-							</Badge>
-						{/if}
-					</div>
-					<div class="p-2">
-						<h3 class="line-clamp-2 text-xs font-medium" title={item.title}>
-							{item.title}
-						</h3>
-						{#if item.types?.length}
-							<p class="text-xs text-muted-foreground">
-								{item.types.slice(0, 2).join(' / ')}
-							</p>
-						{/if}
-					</div>
-				</div>
+				<DoubanCard {item} onclick={handleVideoClick} />
 			{/each}
 		</div>
 

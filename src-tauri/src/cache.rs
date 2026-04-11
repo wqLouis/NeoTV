@@ -1,11 +1,10 @@
-use reqwest::header::{HeaderMap, HeaderValue};
+use crate::http;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
 
 static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
@@ -378,37 +377,5 @@ pub fn clear_all_caches() {
 }
 
 pub async fn fetch_url(url: &str, referer: Option<&str>) -> Result<(Vec<u8>, String), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|e| format!("Client error: {}", e))?;
-
-    let mut headers = HeaderMap::new();
-    headers.insert("User-Agent", HeaderValue::from_static("LibreTV/1.0"));
-    headers.insert("Accept", HeaderValue::from_static("*/*"));
-
-    if let Some(referer_url) = referer {
-        if let Ok(val) = HeaderValue::from_str(referer_url) {
-            headers.insert("Referer", val);
-        }
-    }
-
-    let response = client.get(url).headers(headers).send().await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("HTTP error: {}", status.as_u16()));
-    }
-
-    let content_type = response.headers()
-        .get("content-type")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
-
-    let bytes = response.bytes().await
-        .map_err(|e| format!("Read error: {}", e))?;
-
-    Ok((bytes.to_vec(), content_type))
+    http::fetch_bytes_with_content_type(url, referer).await
 }

@@ -2,6 +2,8 @@ mod api;
 mod cache;
 mod commands;
 mod config;
+mod error;
+mod http;
 mod m3u8;
 mod storage;
 
@@ -9,6 +11,7 @@ use std::fs;
 use tauri::Manager;
 
 pub use commands::*;
+pub use error::HttpError;
 pub use storage::{HistoryItem, FavouriteItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,11 +29,10 @@ pub fn run() {
 
             if parts.len() != 2 {
                 let body = Vec::from(r#"{"error":"Invalid protocol format"}"#);
-                return http::Response::builder()
+                return tauri::http::Response::builder()
                     .status(400)
-                    .header(http::header::CONTENT_TYPE, "application/json")
-                    .body(http::response::Builder::default().body(body).unwrap().into_body())
-                    .unwrap();
+                    .header(tauri::http::header::CONTENT_TYPE, "application/json")
+                    .body(body).unwrap();
             }
 
             let (scheme, encoded_url) = (parts[0], parts[1]);
@@ -42,7 +44,7 @@ pub fn run() {
             match scheme {
                 "segment" => {
                     let result = tauri::async_runtime::block_on(async {
-                        m3u8::fetch_media_segment(&decoded_url).await
+                        http::fetch_bytes(&decoded_url, None).await
                     });
 
                     match result {
@@ -56,56 +58,56 @@ pub fn run() {
                             } else {
                                 "application/octet-stream"
                             };
-                            let mut response = http::Response::builder()
+                            let mut response = tauri::http::Response::builder()
                                 .status(200)
-                                .header(http::header::CONTENT_TYPE, mime)
-                                .body(bytes.clone()).unwrap();
+                                .header(tauri::http::header::CONTENT_TYPE, mime)
+                                .body(bytes).unwrap();
                             response.headers_mut().insert(
-                                http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                                http::header::HeaderValue::from_static("*")
+                                tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                                tauri::http::header::HeaderValue::from_static("*")
                             );
                             response
                         }
                         Err(e) => {
-                            let body = Vec::from(format!(r#"{{"error":"{}"}}"#, e.error));
-                            http::Response::builder()
+                            let body = Vec::from(format!(r#"{{"error":"{}"}}"#, e));
+                            tauri::http::Response::builder()
                                 .status(500)
-                                .header(http::header::CONTENT_TYPE, "application/json")
+                                .header(tauri::http::header::CONTENT_TYPE, "application/json")
                                 .body(body).unwrap()
                         }
                     }
                 }
                 "m3u8" => {
                     let result = tauri::async_runtime::block_on(async {
-                        m3u8::fetch_m3u8_content(&decoded_url, true).await
+                        http::fetch_text(&decoded_url, None).await
                     });
 
                     match result {
-                        Ok(content) => {
-                            let mut response = http::Response::builder()
+                        Ok((content, _)) => {
+                            let mut response = tauri::http::Response::builder()
                                 .status(200)
-                                .header(http::header::CONTENT_TYPE, "application/vnd.apple.mpegurl")
+                                .header(tauri::http::header::CONTENT_TYPE, "application/vnd.apple.mpegurl")
                                 .body(content.into_bytes()).unwrap();
                             response.headers_mut().insert(
-                                http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                                http::header::HeaderValue::from_static("*")
+                                tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                                tauri::http::header::HeaderValue::from_static("*")
                             );
                             response
                         }
                         Err(e) => {
-                            let body = Vec::from(format!(r#"{{"error":"{}"}}"#, e.error));
-                            http::Response::builder()
+                            let body = Vec::from(format!(r#"{{"error":"{}"}}"#, e));
+                            tauri::http::Response::builder()
                                 .status(500)
-                                .header(http::header::CONTENT_TYPE, "application/json")
+                                .header(tauri::http::header::CONTENT_TYPE, "application/json")
                                 .body(body).unwrap()
                         }
                     }
                 }
                 _ => {
                     let body = Vec::from(format!(r#"{{"error":"Unknown scheme: {}"}}"#, scheme));
-                    http::Response::builder()
+                    tauri::http::Response::builder()
                         .status(400)
-                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .header(tauri::http::header::CONTENT_TYPE, "application/json")
                         .body(body).unwrap()
                 }
             }

@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { searchDouban, type DoubanSubject } from '$lib/api/douban';
-	import CachedImage from './CachedImage.svelte';
-	import { Badge } from '$lib/components/ui/badge';
+	import { searchSubjects, type DoubanSubject } from '$lib/api/douban';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import VideoSourceOverlay from './VideoSourceOverlay.svelte';
+	import DoubanCard from './DoubanCard.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ArrowRight } from 'lucide-svelte';
@@ -11,11 +10,12 @@
 	interface Props {
 		title: string;
 		type: 'movie' | 'tv';
-		sort: 'T' | 'R';
+		tag: string;
+		sort: 'recommend' | 'time' | 'rank';
 		seeMoreLink?: string;
 	}
 
-	let { title, type, sort, seeMoreLink }: Props = $props();
+	let { title, type, tag, sort, seeMoreLink }: Props = $props();
 
 	let items = $state<DoubanSubject[]>([]);
 	let loading = $state(true);
@@ -25,13 +25,9 @@
 	let scrollContainer: HTMLDivElement | null = $state(null);
 	let showGradient = $state(true);
 
-	const CARD_WIDTH = 160;
-	const CARD_HEIGHT = 240;
-	const GAP = 16;
-
 	onMount(async () => {
 		try {
-			items = await searchDouban({ sort, type });
+			items = await searchSubjects({ type, tag, sort });
 		} catch (e) {
 			console.error('Failed to load section:', title, e);
 		} finally {
@@ -79,41 +75,19 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="relative">
+		<div class="relative z-0">
 			<div
 				bind:this={scrollContainer}
 				class="scrollbar-hide flex gap-4 overflow-x-auto pb-4"
 				onscroll={handleScroll}
 			>
 				{#each items as item (item.id)}
-					<div
-						class="shrink-0 cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
-						style="width: {CARD_WIDTH}px; height: {CARD_HEIGHT}px;"
-						onclick={(e) => handleCardClick(item, e)}
-						role="button"
-						tabindex="0"
-						onkeydown={(e) =>
-							e.key === 'Enter' && handleCardClick(item, e as unknown as MouseEvent)}
-					>
-						<div class="relative h-full w-full overflow-hidden">
-							<CachedImage
-								src={item.cover_url || item.cover}
-								alt={item.title}
-								class="h-full w-full object-cover"
-								referer="https://movie.douban.com/"
-							/>
-							{#if item.score}
-								<Badge class="absolute top-1.5 right-1.5 bg-yellow-500 text-xs text-black">
-									{item.score}
-								</Badge>
-							{/if}
-						</div>
-					</div>
+					<DoubanCard {item} onclick={handleCardClick} class="min-w-48" imgClass="!h-60" />
 				{/each}
 			</div>
 
 			<div
-				class="pointer-events-none absolute top-0 right-0 h-full w-20 bg-gradient-to-l from-background to-transparent transition-opacity duration-300 {showGradient
+				class="pointer-events-none absolute top-0 right-0 z-10 h-full w-20 bg-gradient-to-l from-background to-transparent transition-opacity duration-300 {showGradient
 					? 'opacity-100'
 					: 'opacity-0'}"
 			></div>

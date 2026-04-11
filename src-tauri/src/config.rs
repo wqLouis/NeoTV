@@ -17,13 +17,8 @@ pub struct ApiSourceInfo {
     pub detail_path: Option<String>,
 }
 
-pub struct ApiPathConfig {
-    pub search: String,
-}
-
-static API_PATH_DEFAULTS: Lazy<ApiPathConfig> = Lazy::new(|| ApiPathConfig {
-    search: "/api.php/provide/vod/?ac=videolist&wd=".to_string(),
-});
+static API_PATH_DEFAULTS: Lazy<String> =
+    Lazy::new(|| "/api.php/provide/vod/?ac=videolist&wd=".to_string());
 
 pub static API_SITES_CONFIG: Lazy<HashMap<String, ApiSourceInfo>> = Lazy::new(|| {
     let mut m = HashMap::new();
@@ -241,7 +236,7 @@ pub static API_SITES_CONFIG: Lazy<HashMap<String, ApiSourceInfo>> = Lazy::new(||
         "ikun".to_string(),
         ApiSourceInfo {
             api_base_url: "https://ikunzyapi.com".to_string(),
-            name: "iKun资源".to_string(),
+            name: "iKUN资源".to_string(),
             detail_base_url: None,
             api_type: ApiType::Json,
             search_path: None,
@@ -260,5 +255,5 @@ pub fn get_search_path(source_info: &ApiSourceInfo) -> String {
     source_info
         .search_path
         .clone()
-        .unwrap_or_else(|| API_PATH_DEFAULTS.search.clone())
+        .unwrap_or_else(|| API_PATH_DEFAULTS.clone())
 }
