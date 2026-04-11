@@ -19,11 +19,6 @@ export async function fetchImage(url: string, referer?: string): Promise<string>
 	}
 }
 
-export async function clearImageCache(): Promise<void> {
-	imageCache.clear();
-	await invoke('cache_clear');
-}
-
 export async function getCacheStats() {
 	return invoke<{
 		mem_count: number;

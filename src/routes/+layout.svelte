@@ -7,7 +7,6 @@
 	import { Home, Search, History, Heart, Settings } from 'lucide-svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
-	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { fly } from 'svelte/transition';
@@ -33,34 +32,15 @@
 		return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
 	}
 
-	async function enableFullscreen() {
-		if (!isMobileDevice()) return;
-		try {
-			const appWindow = getCurrentWindow();
-			await appWindow.setFullscreen(true);
-		} catch {}
-	}
-
-	async function enableFullscreenWithRetry(retries = 3) {
-		await enableFullscreen();
-		if (isMobileDevice()) {
-			for (let i = 0; i < retries; i++) {
-				await new Promise((r) => setTimeout(r, 100));
-				await enableFullscreen();
-			}
-		}
-	}
-
 	onMount(async () => {
 		themeStore.init();
-		await enableFullscreenWithRetry();
 	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
 <div class="flex h-screen">
-	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card">
+	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card pt-8">
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<div class="flex flex-col items-center gap-2 py-2">
 				{#each upperNav as item (item.href)}

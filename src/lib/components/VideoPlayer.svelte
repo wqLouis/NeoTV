@@ -67,7 +67,6 @@
 	let playing = $state(false);
 	let currentTime = $state(0);
 	let duration = $state(0);
-	let buffered = $state(0);
 	let volume = $state(1);
 	let muted = $state(false);
 	let fullscreen = $state(false);
@@ -532,9 +531,6 @@
 			currentTime = videoEl.currentTime;
 			localCurrentTime = videoEl.currentTime;
 			duration = videoEl.duration || 0;
-			if (videoEl.buffered.length > 0) {
-				buffered = videoEl.buffered.end(videoEl.buffered.length - 1);
-			}
 			onTimeUpdate?.(currentTime, duration);
 		}
 	}

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { historyStore, type HistoryItem } from '$lib/stores/history.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';

@@ -3,14 +3,13 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { historyStore } from '$lib/stores/history.svelte';
 	import { parsePlayUrl, getVideoDetail, type VideoDetail } from '$lib/api/search';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { ArrowLeft, Lock, Unlock, AlertCircle } from 'lucide-svelte';
+	import { AlertCircle } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import type { DoubanSubject } from '$lib/api/douban';
 
@@ -29,7 +28,6 @@
 	let playerType: 'native' | 'hls' = $state('native');
 	let playerSrc: string = $state('');
 	let isDesktop = $state(true);
-	let playerKey = $state(0);
 	let showSourceOverlay = $state(false);
 	let overlaySubject = $state<DoubanSubject | null>(null);
 
@@ -173,13 +171,6 @@
 			}
 		}
 		await loadVideoDetail();
-		const appWindow = getCurrentWindow();
-		await appWindow.setFullscreen(true);
-	});
-
-	onDestroy(async () => {
-		const appWindow = getCurrentWindow();
-		await appWindow.setFullscreen(false);
 	});
 
 	async function handleEpisodeSelect(episode: { episode: string; url: string }, index: number) {

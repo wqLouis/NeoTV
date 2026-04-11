@@ -1,113 +1,61 @@
-# NeoTV
+# NeoTV 📺
 
-A modern, lightweight video streaming application built with Tauri 2.x and Svelte 5.
+**一个免费、跨平台的在线视频搜索与观看应用。**
 
-## Features
+[![GitHub License](https://img.shields.io/github/license/your-username/NeoTV-App)]
 
-- **Multi-Source Search** - Search videos across multiple API sources simultaneously
-- **Douban Integration** - Browse movie and TV recommendations from Douban
-- **Auto Source Selection** - Automatically test and select the best playable source
-- **HLS Video Playback** - Smooth video playback with hls.js
-- **Ad Filtering** - Automatically filter out ad segments in videos
-- **Commentary Filtering** - Filter out commentary/review videos
-- **Episode Selection** - Easy episode navigation for TV series
-- **Source Switching** - Switch between different sources while watching
-- **Speed Testing** - Test and optimize source selection
-- **Dark/Light Theme** - Automatic theme switching based on system preference
-- **Search History** - Track your search history
-- **Favorites** - Save your favorite movies and TV shows
-- **Image Caching** - Fast image loading with local caching
+NeoTV 是一个免费的开源在线视频搜索与观看平台，旨在提供简洁、高效、无广告的观影体验。基于 [Tauri 2.0](https://tauri.app/) 框架开发，实现了对 Windows, macOS, Linux, 以及 Android 的原生支持。
 
-## Tech Stack
+---
 
-- **Frontend**: Svelte 5, TailwindCSS, TypeScript
-- **Backend**: Tauri 2.x (Rust)
-- **Video**: hls.js for HLS playback
-- **Mobile**: Android (APK) support via Tauri
+## ✨ 主要特性
 
-## Development
+- 🎬 **海量资源聚合**: 搜索来自多个在线视频源的电影、电视剧、动漫及综艺节目。
+- 🖥️ **原生跨平台体验**: 基于 Tauri 2.0 构建，提供接近原生的性能和流畅体验。支持 Windows, macOS, Linux, 和 Android。
+- 📱 **移动端优化**: UI 界面为移动设备深度优化，确保在手机和平板上也能舒适操作。
+- 🔍 **豆瓣内容集成**: 浏览豆瓣高分电影和电视剧推荐，支持豆瓣排行榜和类型筛选。
+- 🚀 **智能选源**: 自动测试并选择最佳播放源，支持 HLS 视频播放。
+- 🔐 **开源与安全**: 项目完全开源，代码透明，无任何跟踪或广告。
 
-### Prerequisites
+---
 
-- Node.js 18+
-- Rust 1.77+
-- Android SDK (for Android builds)
+## 🛠️ 技术栈
 
-### Setup
+- **核心框架**: [Tauri 2.0](https://tauri.app/)
+- **前端**: Svelte 5, TailwindCSS, TypeScript
+- **后端**: Rust
+- **视频播放**: hls.js
+
+---
+
+## 🚀 快速开始
+
+### 从源码编译
 
 ```bash
-# Install dependencies
-npm install
+# 安装依赖
+bun install
 
-# Run in development mode
-npm run dev
+# 运行开发模式
+bun run dev
 
-# Run Tauri in development mode
-npx tauri dev
-```
+# 构建 web 前端
+bun run build
 
-### Building
-
-```bash
-# Build web frontend
-npm run build
-
-# Build Tauri app for current platform
-npx tauri build
-
-# Build Android APK
+# 构建 Android APK
 ./scripts/build-android.sh
 ```
 
-## Project Structure
+### 前置要求
 
-```
-NeoTV/
-├── src/                    # Frontend source
-│   ├── lib/
-│   │   ├── api/           # API clients (search, douban)
-│   │   ├── components/    # Reusable UI components
-│   │   ├── stores/        # Svelte stores (settings, history, favorites)
-│   │   └── utils/         # Utility functions
-│   └── routes/            # SvelteKit routes
-│       ├── +layout.svelte # App layout with sidebar
-│       ├── +page.svelte   # Home page (Douban recommendations)
-│       ├── search/        # Search page
-│       ├── player/        # Video player page
-│       ├── history/       # Watch history
-│       ├── favourites/    # Favorites page
-│       └── settings/       # App settings
-├── src-tauri/             # Rust backend
-│   └── src/
-│       ├── api.rs         # HTTP request handling
-│       ├── cache.rs       # Image caching
-│       ├── commands.rs    # Tauri commands
-│       ├── m3u8.rs        # M3U8 playlist processing
-│       └── transcoder.rs  # Video transcoding server
-├── scripts/                # Build scripts
-│   └── build-android.sh   # Android APK build script
-└── docs/                  # Documentation
-```
+- Node.js 18+
+- Rust 1.77+
+- Android SDK (仅用于 Android 构建)
 
-## Settings
+---
 
-### Content Filters
+## ⚠️ 免责声明
 
-- **Yellow Filter** - Filter adult content from search results
-- **Commentary Filter** - Filter out commentary/review videos
-- **Ad Filtering** - Filter ad segments during video playback
+NeoTV 仅作为视频搜索工具，不存储、上传或分发任何视频内容。所有视频均来自第三方 API 接口提供的搜索结果。如有侵权内容，请联系相应的内容提供方。
 
-### Source Management
-
-- **Auto Integrate Sources** - Automatically test and select playable sources
-- **Source Speed Test** - Test all sources and optimize selection
-
-### Playback
-
-- **Autoplay** - Automatically start playback on video load
-- **Auto Continue** - Automatically play next episode
-
-## Supported Platforms
-
-- Desktop (Windows, macOS, Linux)
-- Android (APK)
+本项目开发者不对使用本项目产生的任何后果负责。使用本项目时，您必须遵守当地的法律法规。

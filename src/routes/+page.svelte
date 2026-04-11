@@ -113,7 +113,7 @@
 
 <div class="mx-auto py-4">
 	<div
-		class="sticky top-0 z-30 mb-4 border-b bg-background/90 px-4 pt-2 pb-4 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
+		class="sticky top-0 z-30 mb-4 border-b bg-background/90 px-4 pt-8 pb-4 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
 	>
 		<Tabs value={doubanSwitch} onValueChange={handleTabChange} class="mb-4">
 			<TabsList>

@@ -177,7 +177,7 @@
 		{#if searchMode === 'api'}
 			<SearchBar bind:value={query} placeholder="搜索视频..." onSearch={handleSearch} />
 		{:else}
-			<div class="sticky top-14 z-30 bg-background pb-4">
+			<div class="sticky top-14 z-30 bg-background pt-8 pb-4">
 				<div class="scrollbar-hide mb-3 flex gap-2 overflow-x-auto pb-2">
 					{#each quickFilters as filter}
 						<button

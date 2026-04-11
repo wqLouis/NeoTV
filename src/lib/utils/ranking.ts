@@ -1,29 +1,11 @@
-export interface SpeedTestResult {
-	source_id: string;
-	source_name: string;
-	latency_ms: number;
-	download_speed_kbps: number;
-	status: string;
-	error?: string;
-}
+import type { SpeedTestResult } from './speedTest';
+import type { SearchResult } from '$lib/api/search';
 
 export interface ScoredSource {
 	result: SearchResult;
 	score: number;
 	speedMs?: number;
 	tagMatchBonus: number;
-}
-
-export interface SearchResult {
-	vod_id: string;
-	vod_name: string;
-	vod_pic: string;
-	type_name: string;
-	vod_year: string;
-	vod_remarks: string;
-	vod_content?: string;
-	source_name: string;
-	source_code: string;
 }
 
 export interface SearchGroup {
@@ -232,39 +214,4 @@ export function sortGroupsByScore(
 	scoredGroups.sort((a, b) => b.totalScore - a.totalScore);
 
 	return scoredGroups;
-}
-
-export function groupByName(results: SearchResult[]): Map<string, SearchResult[]> {
-	const groups = new Map<string, SearchResult[]>();
-
-	for (const result of results) {
-		const name = result.vod_name;
-		if (!groups.has(name)) {
-			groups.set(name, []);
-		}
-		groups.get(name)!.push(result);
-	}
-
-	return groups;
-}
-
-export function sortGroupsByScoreLegacy(
-	groups: Map<string, SearchResult[]>,
-	speedCache: Map<string, SpeedTestResult>,
-	userQuery: string,
-	isMovieSearch = false
-): SearchGroup[] {
-	const rawGroups: RawGroup[] = [];
-
-	for (const [name, sources] of groups) {
-		const normName = normalizeName(name);
-		rawGroups.push({
-			key: name,
-			normalizedName: normName,
-			tags: sources[0] ? extractTags(sources[0]) : [],
-			sources
-		});
-	}
-
-	return sortGroupsByScore(rawGroups, speedCache, userQuery, isMovieSearch);
 }

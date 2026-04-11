@@ -27,35 +27,6 @@ interface DoubanResponse {
 }
 
 const API_CACHE_MS = 10 * 60 * 1000;
-const IMAGE_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
-
-const imageCache = new Map<string, string>();
-
-export async function getCachedImageUrl(url: string): Promise<string> {
-	if (!url) return '';
-
-	if (imageCache.has(url)) {
-		return imageCache.get(url)!;
-	}
-
-	try {
-		const { invoke } = await import('@tauri-apps/api/core');
-		const dataUrl: string = await invoke('cache_fetch_image', { url });
-		imageCache.set(url, dataUrl);
-		return dataUrl;
-	} catch (e) {
-		console.error('[Image] Failed to fetch via cache:', e);
-		return url;
-	}
-}
-
-export function clearImageCache() {
-	imageCache.clear();
-	if (typeof localStorage !== 'undefined') {
-		const keys = [...localStorage.keys()].filter((k) => k.startsWith('img_'));
-		keys.forEach((k) => localStorage.removeItem(k));
-	}
-}
 
 async function fetchDoubanData(url: string): Promise<DoubanResponse> {
 	const cacheKey = `douban_api_cache_${url}`;
