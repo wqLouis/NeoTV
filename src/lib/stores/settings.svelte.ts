@@ -11,6 +11,7 @@ export interface Settings {
 	yellowFilterEnabled: boolean;
 	adFilteringEnabled: boolean;
 	autoplayEnabled: boolean;
+	autoplayNextEpisode: boolean;
 	episodesReversed: boolean;
 	gridDensity: GridDensity;
 	commentaryFilterEnabled: boolean;
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: Settings = {
 	yellowFilterEnabled: true,
 	adFilteringEnabled: true,
 	autoplayEnabled: true,
+	autoplayNextEpisode: true,
 	episodesReversed: false,
 	gridDensity: 'standard',
 	commentaryFilterEnabled: true,
@@ -79,6 +81,9 @@ function createSettingsStore() {
 		get autoplayEnabled() {
 			return settings.autoplayEnabled;
 		},
+		get autoplayNextEpisode() {
+			return settings.autoplayNextEpisode;
+		},
 		get episodesReversed() {
 			return settings.episodesReversed;
 		},
@@ -132,6 +137,10 @@ function createSettingsStore() {
 			settings.autoplayEnabled = enabled;
 			save();
 		},
+		setAutoplayNextEpisode(enabled: boolean) {
+			settings.autoplayNextEpisode = enabled;
+			save();
+		},
 		setEpisodesReversed(reversed: boolean) {
 			settings.episodesReversed = reversed;
 			save();
@@ -158,8 +167,11 @@ function createSettingsStore() {
 					yellowFilterEnabled: settings.yellowFilterEnabled,
 					adFilteringEnabled: settings.adFilteringEnabled,
 					autoplayEnabled: settings.autoplayEnabled,
+					autoplayNextEpisode: settings.autoplayNextEpisode,
 					episodesReversed: settings.episodesReversed,
-					gridDensity: settings.gridDensity
+					gridDensity: settings.gridDensity,
+					commentaryFilterEnabled: settings.commentaryFilterEnabled,
+					autoIntegrateSources: settings.autoIntegrateSources
 				},
 				null,
 				2

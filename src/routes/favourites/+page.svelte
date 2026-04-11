@@ -6,29 +6,12 @@
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Play, Trash2, Heart } from 'lucide-svelte';
-
-	function formatTime(timestamp: number): string {
-		const date = new Date(timestamp);
-		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-
-		if (diff < 60000) return '刚刚';
-		if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-		if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-		if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
-		return date.toLocaleDateString();
-	}
+	import { formatRelativeTime } from '$lib/utils/format';
 
 	function handlePlay(item: FavouriteItem) {
-		const params = new URLSearchParams({
-			id: item.id,
-			source: item.source,
-			title: item.title,
-			...(item.cover && { cover: item.cover }),
-			...(item.episode && { episode: item.episode }),
-			...(item.episodeIndex !== undefined && { episodeIndex: item.episodeIndex.toString() })
-		});
-		goto(`/player?${params.toString()}`);
+		goto(
+			`/player?search=${encodeURIComponent(item.title)}&id=${item.id}&source=${item.source}&title=${encodeURIComponent(item.title)}`
+		);
 	}
 
 	function handleRemove(item: FavouriteItem) {
@@ -92,7 +75,7 @@
 
 								<div class="mt-3 flex items-center justify-between">
 									<span class="text-xs text-muted-foreground">
-										添加于 {formatTime(item.addedAt)}
+										添加于 {formatRelativeTime(item.addedAt)}
 									</span>
 									<Button size="sm" onclick={() => handlePlay(item)}>
 										<Play class="mr-1 h-4 w-4" />

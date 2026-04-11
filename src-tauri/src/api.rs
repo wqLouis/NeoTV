@@ -16,6 +16,8 @@ pub struct HttpResponse {
     pub status: u16,
     pub headers: HashMap<String, String>,
     pub body: String,
+    #[serde(default)]
+    pub cached: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -109,6 +111,7 @@ pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, H
                         status,
                         headers: resp_headers,
                         body: text_body,
+                        cached: false,
                     })
                 }
                 Err(e) => {

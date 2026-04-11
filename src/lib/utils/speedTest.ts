@@ -10,15 +10,34 @@ export interface SpeedTestResult {
 	error?: string;
 }
 
+interface CachedSpeed {
+	result: SpeedTestResult;
+	timestamp: number;
+}
+
+const SPEED_CACHE_TTL_MS = 30 * 60 * 1000;
+const speedCache = new Map<string, CachedSpeed>();
+
 export async function testSourceSpeed(
 	sourceId: string,
 	customUrl?: string
 ): Promise<SpeedTestResult> {
+	const cacheKey = customUrl ? `custom_${customUrl}` : sourceId;
+	const now = Date.now();
+
+	if (speedCache.has(cacheKey)) {
+		const cached = speedCache.get(cacheKey)!;
+		if (now - cached.timestamp < SPEED_CACHE_TTL_MS) {
+			return cached.result;
+		}
+	}
+
 	try {
 		const result = await invoke<SpeedTestResult>('test_source_speed', {
 			sourceId,
 			customUrl: customUrl || null
 		});
+		speedCache.set(cacheKey, { result, timestamp: now });
 		return result;
 	} catch (e) {
 		return {
@@ -81,4 +100,52 @@ export function getSpeedLevel(kbps: number): 'fast' | 'medium' | 'slow' | 'unkno
 	if (kbps > 500000) return 'fast';
 	if (kbps > 100000) return 'medium';
 	return 'slow';
+}
+
+export function testMultipleSources(
+	sources: { source_id: string; customUrl?: string }[],
+	timeoutMs = 3000
+): Promise<Map<string, SpeedTestResult>> {
+	const results = new Map<string, SpeedTestResult>();
+	const promises: Promise<void>[] = [];
+
+	for (const source of sources) {
+		const cacheKey = source.customUrl ? `custom_${source.customUrl}` : source.source_id;
+		const cached = speedCache.get(cacheKey);
+		if (cached && Date.now() - cached.timestamp < SPEED_CACHE_TTL_MS) {
+			results.set(source.source_id, cached.result);
+			continue;
+		}
+
+		const p = testSourceSpeed(source.source_id, source.customUrl)
+			.then((result) => {
+				results.set(source.source_id, result);
+			})
+			.catch(() => {
+				results.set(source.source_id, {
+					source_id: source.source_id,
+					source_name: getSourceName(source.source_id),
+					latency_ms: 0,
+					download_speed_kbps: 0,
+					status: 'error',
+					error: 'Test failed'
+				});
+			});
+		promises.push(p);
+	}
+
+	return Promise.race([
+		Promise.all(promises).then(() => results),
+		new Promise<Map<string, SpeedTestResult>>((resolve) =>
+			setTimeout(() => resolve(results), timeoutMs)
+		)
+	]);
+}
+
+export function clearSpeedCache() {
+	speedCache.clear();
+}
+
+export function getSpeedCacheSize(): number {
+	return speedCache.size;
 }

@@ -9,16 +9,8 @@
 		LoaderConfiguration,
 		LoaderCallbacks
 	} from 'hls.js';
-	import {
-		Play,
-		Pause,
-		Volume2,
-		VolumeX,
-		Maximize,
-		Minimize,
-		List,
-		ArrowLeft
-	} from 'lucide-svelte';
+	import PlayerControls from './PlayerControls.svelte';
+	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
 
 	interface Episode {
 		episode: string;
@@ -69,117 +61,6 @@
 	let containerEl: HTMLDivElement;
 	let hls: Hls | null = null;
 
-	async function checkMediaCapabilities(): Promise<{
-		video: string[];
-		audio: string[];
-		supported: boolean;
-	}> {
-		const result = { video: [] as string[], audio: [] as string[], supported: false };
-
-		if (!('mediaCapabilities' in navigator)) {
-			console.warn('[HLS] MediaCapabilities API not available');
-			return result;
-		}
-
-		const mediaCapabilities = (
-			navigator as Navigator & {
-				mediaCapabilities: {
-					decodingInfo: (config: {
-						type: string;
-						video?: { contentType: string; width: number; height: number };
-						audio?: { contentType: string };
-					}) => Promise<{ supported: boolean }>;
-				};
-			}
-		).mediaCapabilities;
-
-		const testConfigs = [
-			{
-				type: 'media-source',
-				video: { contentType: 'video/mp4; codecs="avc1.640028"', width: 1920, height: 1080 },
-				audio: undefined
-			},
-			{
-				type: 'media-source',
-				video: { contentType: 'video/mp4; codecs="avc1.42E01E"', width: 1280, height: 720 },
-				audio: undefined
-			},
-			{
-				type: 'media-source',
-				audio: { contentType: 'audio/mp4; codecs="mp4a.40.2"' },
-				video: undefined
-			},
-			{
-				type: 'media-source',
-				audio: { contentType: 'audio/mp4; codecs="mp4a.40.5"' },
-				video: undefined
-			},
-			{
-				type: 'media-source',
-				audio: { contentType: 'audio/mp4; codecs="mp4a.40.7"' },
-				video: undefined
-			},
-			{
-				type: 'media-source',
-				audio: { contentType: 'audio/webm; codecs="opus"' },
-				video: undefined
-			},
-			{ type: 'media-source', audio: { contentType: 'audio/mp3' }, video: undefined }
-		];
-
-		for (const config of testConfigs) {
-			try {
-				const info = await mediaCapabilities.decodingInfo(config);
-				if (info.supported) {
-					if (config.video) {
-						result.video.push(config.video.contentType);
-					}
-					if (config.audio) {
-						result.audio.push(config.audio.contentType);
-					}
-				}
-			} catch (e) {
-				// Ignore individual config errors
-			}
-		}
-
-		result.supported = result.video.length > 0 || result.audio.length > 0;
-		console.log('[HLS] MediaCapabilities check:', result);
-		return result;
-	}
-
-	class SegmentLoader {
-		constructor(config: { debug: boolean }) {}
-		load(
-			context: { type: string; url: string },
-			callbacks: {
-				onSuccess: (response: { data: ArrayBuffer | string; code: number; text: string }) => void;
-				onError: (error: { code: number; text: string }) => void;
-			}
-		): void {
-			const { type, url } = context;
-
-			if (type === 'manifest' || type === 'level' || type === 'audioTrack' || type === 'subtitle') {
-				fetch(url)
-					.then((r) => r.text())
-					.then((text) => callbacks.onSuccess({ data: text, code: 200, text }))
-					.catch((e) => callbacks.onError({ code: 0, text: String(e) }));
-				return;
-			}
-
-			invoke<number[]>('fetch_media_segment', { url })
-				.then((data) => {
-					const buffer = new Uint8Array(data).buffer;
-					callbacks.onSuccess({ data: buffer, code: 200, text: '' });
-				})
-				.catch((e) => {
-					console.error('[HLS] Segment load error:', e);
-					callbacks.onError({ code: 0, text: String(e) });
-				});
-		}
-		static destroy() {}
-	}
-
 	let playing = $state(false);
 	let currentTime = $state(0);
 	let duration = $state(0);
@@ -196,9 +77,12 @@
 	let localPlaybackRate = $state(1);
 
 	const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+	const LONG_PRESS_DURATION = 300;
 
 	let lastClickTime = 0;
 	let lastClickTarget: HTMLElement | null = null;
+	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+	let isLongPressing = false;
 
 	function showControlsTemporarily() {
 		showControls = true;
@@ -221,6 +105,7 @@
 	}
 
 	function handleVideoClick(e: MouseEvent) {
+		if (isLongPressing) return;
 		const now = Date.now();
 		if (now - lastClickTime < 300 && lastClickTarget === e.target) {
 			return;
@@ -231,6 +116,7 @@
 	}
 
 	function handleVideoDoubleClick(e: MouseEvent) {
+		if (isLongPressing) return;
 		const rect = containerEl.getBoundingClientRect();
 		const x = e.clientX - rect.left;
 		const isLeftSide = x < rect.width / 2;
@@ -267,6 +153,29 @@
 			document.exitFullscreen();
 		} else {
 			containerEl.requestFullscreen();
+		}
+	}
+
+	function startLongPress() {
+		if (longPressTimer) clearTimeout(longPressTimer);
+		isLongPressing = false;
+		longPressTimer = setTimeout(() => {
+			if (videoEl && localPlaybackRate !== 2) {
+				setPlaybackRate(2);
+				isLongPressing = true;
+				showControlsTemporarily();
+			}
+		}, LONG_PRESS_DURATION);
+	}
+
+	function endLongPress() {
+		if (longPressTimer) {
+			clearTimeout(longPressTimer);
+			longPressTimer = null;
+		}
+		if (isLongPressing && videoEl) {
+			setPlaybackRate(1);
+			isLongPressing = false;
 		}
 	}
 
@@ -324,6 +233,9 @@
 		showPopup = false;
 		onEpisodeChange?.(episode, index);
 	}
+
+	let mediaErrorRecoveryCount = 0;
+	const MAX_MEDIA_ERROR_RECOVERIES = 3;
 
 	class RustLoader implements Loader<LoaderContext> {
 		context: LoaderContext | null = null;
@@ -417,6 +329,7 @@
 
 	async function initHls() {
 		console.log('[HLS] initHls called:', { type, src });
+		mediaErrorRecoveryCount = 0;
 
 		if (type !== 'hls') {
 			console.log('[HLS] type is not hls, skipping');
@@ -447,27 +360,59 @@
 				if (data.fatal && hls) {
 					switch (data.type) {
 						case Hls.ErrorTypes.NETWORK_ERROR:
-							console.warn('[HLS] Network error, trying transcoder...');
+							console.error('[HLS] Network error');
 							hls.destroy();
 							hls = null;
-							initTranscoded();
+							error = '网络连接失败，请检查网络';
 							return;
 						case Hls.ErrorTypes.MEDIA_ERROR:
 							if (data.details === Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR) {
-								console.warn('[HLS] Codec not supported by MSE, trying Rust transcoder...');
-								hls.destroy();
-								hls = null;
-								initTranscoded();
+								mediaErrorRecoveryCount++;
+								if (mediaErrorRecoveryCount <= MAX_MEDIA_ERROR_RECOVERIES) {
+									console.warn(
+										`[HLS] Codec error, recovery attempt ${mediaErrorRecoveryCount}/${MAX_MEDIA_ERROR_RECOVERIES}`
+									);
+									hls.recoverMediaError();
+								} else {
+									console.error('[HLS] Codec error recovery exhausted');
+									hls.destroy();
+									hls = null;
+									error = '视频解码失败，暂不支持该格式';
+								}
 								return;
 							}
 							if (data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR) {
-								console.warn('[HLS] Manifest incompatibility, trying transcoder...');
-								hls.destroy();
-								hls = null;
-								initTranscoded();
+								mediaErrorRecoveryCount++;
+								if (mediaErrorRecoveryCount <= MAX_MEDIA_ERROR_RECOVERIES) {
+									console.warn(
+										`[HLS] Manifest incompatibility, recovery attempt ${mediaErrorRecoveryCount}/${MAX_MEDIA_ERROR_RECOVERIES}`
+									);
+									hls.recoverMediaError();
+								} else {
+									console.error('[HLS] Manifest incompatibility recovery exhausted');
+									hls.destroy();
+									hls = null;
+									error = '视频编码不兼容，请尝试其他片源';
+								}
+								return;
+							}
+							if (data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR) {
+								mediaErrorRecoveryCount++;
+								console.warn(
+									`[HLS] Buffer append error, count ${mediaErrorRecoveryCount}/${MAX_MEDIA_ERROR_RECOVERIES}`
+								);
+								if (mediaErrorRecoveryCount > MAX_MEDIA_ERROR_RECOVERIES) {
+									console.error('[HLS] Buffer append error recovery exhausted');
+									hls.destroy();
+									hls = null;
+									error = '视频缓冲失败，请尝试其他片源';
+								} else {
+									hls.recoverMediaError();
+								}
 								return;
 							}
 							hls.recoverMediaError();
+							mediaErrorRecoveryCount = 0;
 							return;
 						default:
 							error = '视频播放失败';
@@ -489,8 +434,8 @@
 				onReady?.();
 			});
 		} else {
-			console.log('[HLS] Hls.isSupported() = false, trying transcoder');
-			initTranscoded();
+			console.error('[HLS] Hls.isSupported() = false, cannot play HLS');
+			error = '当前浏览器不支持 HLS 播放';
 		}
 	}
 
@@ -503,76 +448,6 @@
 			videoEl.play().catch(() => {});
 		}
 		onReady?.();
-	}
-
-	async function initTranscoded() {
-		console.log('[HLS] initTranscoded called, src:', src);
-		if (!src) return;
-
-		loading = true;
-		error = null;
-
-		try {
-			console.log('[HLS] Checking transcoder system...');
-			const sysInfo = await invoke<{
-				vaapi_available: boolean;
-				ffmpeg_available: boolean;
-			}>('check_transcoder');
-			console.log('[HLS] Transcoder system info:', sysInfo);
-
-			if (!sysInfo.ffmpeg_available) {
-				error = '系统缺少 ffmpeg，无法转码播放';
-				loading = false;
-				return;
-			}
-
-			const streamId = `stream_${Date.now()}`;
-			console.log('[HLS] Starting transcoded stream:', streamId);
-
-			const streamInfo = await invoke<{
-				url: string;
-				port: number;
-				duration: number | null;
-				vaapi_available: boolean;
-				ffmpeg_available: boolean;
-			}>('start_transcoded_stream', {
-				id: streamId,
-				m3u8Url: src,
-				referer: null
-			});
-
-			console.log('[HLS] Transcoded stream URL:', streamInfo.url, 'Duration:', streamInfo.duration);
-			loading = false;
-			videoEl.src = streamInfo.url;
-
-			if (streamInfo.duration) {
-				videoEl.addEventListener(
-					'loadedmetadata',
-					() => {
-						if (videoEl.duration === Infinity || isNaN(videoEl.duration)) {
-							Object.defineProperty(videoEl, 'duration', {
-								value: streamInfo.duration,
-								writable: true
-							});
-							console.log('[HLS] Duration set from M3U8:', streamInfo.duration);
-						}
-					},
-					{ once: true }
-				);
-			}
-
-			if (autoplay) {
-				videoEl.play().catch((e) => {
-					console.error('[HLS] Play error:', e);
-				});
-			}
-
-			onReady?.();
-		} catch (e) {
-			console.error('[HLS] Transcoder error:', e);
-			error = '视频转码失败: ' + String(e);
-			loading = false;
-		}
 	}
 
 	onMount(() => {
@@ -594,21 +469,11 @@
 
 	onDestroy(() => {
 		clearTimeout(controlsTimeout);
+		if (longPressTimer) clearTimeout(longPressTimer);
 		if (hls) {
 			hls.destroy();
 		}
 	});
-
-	function formatTime(seconds: number): string {
-		if (isNaN(seconds)) return '00:00';
-		const h = Math.floor(seconds / 3600);
-		const m = Math.floor((seconds % 3600) / 60);
-		const s = Math.floor(seconds % 60);
-		if (h > 0) {
-			return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-		}
-		return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-	}
 
 	function handleTimeUpdate() {
 		if (videoEl) {
@@ -654,79 +519,18 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if showPopup}
-	<button
-		class="fixed inset-0 z-30 cursor-default bg-black/50"
-		onclick={closePopup}
-		aria-label="Close sidebar"
-	></button>
-	<div
-		class="fixed top-0 right-0 z-40 h-full w-72 overflow-hidden bg-black/95 backdrop-blur-sm"
-		role="dialog"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<div class="flex h-full flex-col p-4">
-			<div class="mb-4 flex items-center justify-between">
-				<span class="text-sm font-medium text-white">播放设置</span>
-				<button class="text-white/60 hover:text-white" onclick={closePopup}>✕</button>
-			</div>
-
-			<div class="mb-4 flex-1 overflow-y-auto">
-				<div class="mb-4">
-					<span class="mb-2 block text-xs text-white/60">倍速</span>
-					<div class="flex flex-wrap gap-2">
-						{#each SPEED_OPTIONS as speed}
-							<button
-								class="rounded-md px-3 py-1.5 text-sm transition-colors
-									{localPlaybackRate === speed
-									? 'bg-primary text-primary-foreground'
-									: 'bg-white/10 text-white hover:bg-white/20'}"
-								onclick={() => setPlaybackRate(speed)}
-							>
-								{speed}x
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				{#if availableSources && availableSources.length > 1}
-					<div class="mb-4">
-						<span class="mb-2 block text-xs text-white/60">源选择</span>
-						<div class="flex flex-wrap gap-2">
-							{#each availableSources as source (source.source_code)}
-								<button
-									class="rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition-colors hover:bg-white/20"
-									onclick={() => onSourceChange?.(source)}
-								>
-									{source.source_name}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-
-				{#if episodes.length > 0}
-					<div class="overflow-y-auto">
-						<span class="mb-2 block text-xs text-white/60">选集 ({episodes.length})</span>
-						<div class="grid grid-cols-5 gap-2 sm:grid-cols-6">
-							{#each episodes as episode, i (episode.url)}
-								<button
-									class="rounded-md px-2 py-1.5 text-center text-xs transition-colors
-										{i === currentEpisodeIndex
-										? 'bg-primary text-primary-foreground'
-										: 'bg-white/10 text-white hover:bg-white/20'}"
-									onclick={() => handleEpisodeSelect(episode, i)}
-								>
-									{episode.episode}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
+<PlayerSettingsPopup
+	show={showPopup}
+	playbackRate={localPlaybackRate}
+	{availableSources}
+	{episodes}
+	{currentEpisodeIndex}
+	speedOptions={SPEED_OPTIONS}
+	onClose={closePopup}
+	onPlaybackRateChange={setPlaybackRate}
+	{onSourceChange}
+	onEpisodeSelect={handleEpisodeSelect}
+/>
 
 <div
 	class="relative h-full w-full bg-black"
@@ -761,94 +565,41 @@
 		onended={handleEnded}
 		onerror={handleError}
 		oncanplay={handleCanPlay}
+		onmousedown={startLongPress}
+		onmouseup={endLongPress}
+		onmouseleave={endLongPress}
+		ontouchstart={(e) => {
+			e.preventDefault();
+			startLongPress();
+		}}
+		ontouchend={endLongPress}
+		ontouchcancel={endLongPress}
 	>
 		<track kind="captions" />
 	</video>
 
-	<div
-		class="absolute inset-0 z-50 flex flex-col justify-between transition-opacity duration-300 {showControls
-			? 'opacity-100'
-			: 'pointer-events-none opacity-0'}"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<div class="bg-gradient-to-b from-black/70 to-transparent p-4">
-			<div class="flex items-center justify-between text-white">
-				<button
-					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-					onclick={() => onReturn?.()}
-				>
-					<ArrowLeft class="h-4 w-4" />
-				</button>
-				<span class="text-sm">{formatTime(currentTime)} / {formatTime(duration)}</span>
-				<button
-					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-					onclick={togglePlay}
-				>
-					{#if playing}
-						<Pause class="h-4 w-4" />
-					{:else}
-						<Play class="h-4 w-4" />
-					{/if}
-				</button>
-			</div>
-		</div>
-
-		<div class="bg-gradient-to-t from-black/70 to-transparent p-4">
-			<input
-				type="range"
-				min="0"
-				max={duration || 100}
-				value={localCurrentTime}
-				oninput={handleSeek}
-				class="mb-3 h-1 w-full cursor-pointer appearance-none rounded-lg bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-			/>
-
-			<div class="flex items-center justify-between text-white">
-				<div class="flex items-center gap-3">
-					<button
-						class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-						onclick={toggleMute}
-					>
-						{#if muted || volume === 0}
-							<VolumeX class="h-4 w-4" />
-						{:else}
-							<Volume2 class="h-4 w-4" />
-						{/if}
-					</button>
-					<input
-						type="range"
-						min="0"
-						max="1"
-						step="0.01"
-						value={muted ? 0 : volume}
-						oninput={handleVolumeChange}
-						class="h-1 w-20 cursor-pointer appearance-none rounded-lg bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-					/>
-				</div>
-
-				<div class="flex items-center gap-2">
-					<button
-						class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-						onclick={() => {
-							showPopup = !showPopup;
-						}}
-					>
-						<List class="h-4 w-4" />
-					</button>
-					{#if showFullscreenButton}
-						<button
-							class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-							onclick={toggleFullscreen}
-						>
-							{#if fullscreen}
-								<Minimize class="h-4 w-4" />
-							{:else}
-								<Maximize class="h-4 w-4" />
-							{/if}
-						</button>
-					{/if}
-				</div>
-			</div>
-		</div>
-	</div>
+	<PlayerControls
+		{currentTime}
+		{duration}
+		{playing}
+		{muted}
+		{volume}
+		{fullscreen}
+		{showControls}
+		{showFullscreenButton}
+		{onReturn}
+		onTogglePlay={togglePlay}
+		onSeek={(v) => {
+			localCurrentTime = v;
+			if (videoEl) videoEl.currentTime = v;
+		}}
+		onToggleMute={toggleMute}
+		onVolumeChange={(v) => {
+			volume = v;
+			if (videoEl) videoEl.volume = v;
+			muted = v === 0;
+		}}
+		onToggleFullscreen={toggleFullscreen}
+		onTogglePopup={() => (showPopup = !showPopup)}
+	/>
 </div>

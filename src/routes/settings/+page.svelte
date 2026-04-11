@@ -32,6 +32,10 @@
 	}
 
 	let cacheStats = $state<{
+		hits: number;
+		misses: number;
+		total: number;
+		hit_rate: number;
 		mem_count: number;
 		mem_size: number;
 		disk_count: number;
@@ -560,8 +564,8 @@
 						<p class="text-sm text-muted-foreground">播放完毕后自动播放下一集</p>
 					</div>
 					<Switch
-						checked={settingsStore.autoplayEnabled}
-						onCheckedChange={(v: boolean) => settingsStore.setAutoplayEnabled(v)}
+						checked={settingsStore.autoplayNextEpisode}
+						onCheckedChange={(v: boolean) => settingsStore.setAutoplayNextEpisode(v)}
 					/>
 				</div>
 				<Separator />
@@ -583,6 +587,17 @@
 				<CardTitle>缓存管理</CardTitle>
 			</CardHeader>
 			<CardContent class="space-y-4">
+				{#if cacheStats}
+					<div class="mb-4 rounded-lg bg-muted p-3">
+						<div class="text-sm font-medium">缓存统计</div>
+						<div class="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+							<div>命中: {cacheStats.hits}</div>
+							<div>未命中: {cacheStats.misses}</div>
+							<div>命中率: {(cacheStats.hit_rate * 100).toFixed(1)}%</div>
+							<div>总计: {cacheStats.total}</div>
+						</div>
+					</div>
+				{/if}
 				<div class="flex items-center justify-between">
 					<div>
 						<Label>图片缓存</Label>

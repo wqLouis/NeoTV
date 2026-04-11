@@ -55,10 +55,54 @@ fn resolve_url(base_url: &str, relative_url: &str) -> Result<String, String> {
 }
 
 fn filter_ad_segments(content: &str) -> String {
-    content.lines()
-        .filter(|line| !line.starts_with("#EXT-X-DISCONTINUITY"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    let lines: Vec<&str> = content.lines().collect();
+    let mut result = Vec::new();
+    let mut in_ad_section = false;
+    let mut ad_cue_count = 0;
+    
+    for line in lines {
+        let trimmed = line.trim();
+        
+        if trimmed.starts_with("#EXT-X-CUE-OUT") {
+            in_ad_section = true;
+            ad_cue_count += 1;
+            continue;
+        }
+        
+        if trimmed.starts_with("#EXT-X-CUE-IN") {
+            in_ad_section = false;
+            continue;
+        }
+        
+        if trimmed.starts_with("#EXT-X-DISCONTINUITY") && ad_cue_count > 0 {
+            continue;
+        }
+        
+        if in_ad_section {
+            continue;
+        }
+        
+        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            let lower_url = trimmed.to_lowercase();
+            if lower_url.contains("/ads/") 
+                || lower_url.contains("/ad/") 
+                || lower_url.contains("/ads.")
+                || lower_url.contains("advertisement")
+                || lower_url.contains("/commercial/")
+                || lower_url.contains("/sponsor/")
+                || lower_url.contains("_ad_")
+                || lower_url.contains("-ad-")
+                || lower_url.contains("pre-roll")
+                || lower_url.contains("post-roll")
+            {
+                continue;
+            }
+        }
+        
+        result.push(line);
+    }
+    
+    result.join("\n")
 }
 
 fn parse_m3u8_duration(content: &str) -> Option<f64> {

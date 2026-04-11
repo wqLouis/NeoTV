@@ -7,26 +7,7 @@
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Play, Trash2, Clock } from 'lucide-svelte';
-
-	function formatTime(timestamp: number): string {
-		const date = new Date(timestamp);
-		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-
-		if (diff < 60000) return '刚刚';
-		if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-		if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-		if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
-		return date.toLocaleDateString();
-	}
-
-	function formatDuration(seconds: number): string {
-		const h = Math.floor(seconds / 3600);
-		const m = Math.floor((seconds % 3600) / 60);
-		const s = Math.floor(seconds % 60);
-		if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-		return `${m}:${s.toString().padStart(2, '0')}`;
-	}
+	import { formatDuration, formatRelativeTime } from '$lib/utils/format';
 
 	function getProgressPercent(item: HistoryItem): number {
 		if (!item.duration) return 0;
@@ -117,7 +98,7 @@
 												{formatDuration(item.position)} / {formatDuration(item.duration)}
 											</span>
 											<span class="text-xs text-muted-foreground">
-												{formatTime(item.timestamp)}
+												{formatRelativeTime(item.timestamp)}
 											</span>
 										</div>
 									</div>

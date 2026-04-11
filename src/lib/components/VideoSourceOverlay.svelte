@@ -4,12 +4,14 @@
 	import type { DoubanSubject } from '$lib/api/douban';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { favouritesStore } from '$lib/stores/favourites.svelte';
-	import { testSourceSpeed } from '$lib/utils/speedTest';
+	import { testSourceSpeed, type SpeedTestResult } from '$lib/utils/speedTest';
+	import type { SearchGroup, ScoredSource } from '$lib/utils/ranking';
+	import { groupByNameAndTags, sortGroupsByScore } from '$lib/utils/ranking';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, X, Calendar, Film, Info, Users, Heart, AlertCircle } from 'lucide-svelte';
+	import { Play, X, Calendar, Film, Info, Users, Heart, AlertCircle, Zap } from 'lucide-svelte';
 	import { fly, fade, scale } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
@@ -34,10 +36,10 @@
 	let loading = $state(false);
 	let testingSources = $state(false);
 	let searchResults = $state<SearchResult[]>([]);
+	let groupedResults = $state<SearchGroup[]>([]);
+	let speedCache = $state<Map<string, SpeedTestResult>>(new Map());
 	let contentVisible = $state(false);
 	let selectedDescription = $state('');
-	let autoSelectedResult = $state<SearchResult | null>(null);
-	let allSourcesFailed = $state(false);
 	let overlayDidOpen = $state(false);
 
 	function handlePopState() {
@@ -56,9 +58,12 @@
 	async function searchSources(query: string) {
 		loading = true;
 		searchResults = [];
+		groupedResults = [];
 		selectedDescription = '';
-		autoSelectedResult = null;
-		allSourcesFailed = false;
+		const isMovieSearch =
+			item?.types?.some((t) => t.includes('电影') || t.includes('film')) ?? false;
+		const searchTags = item?.types ?? [];
+
 		try {
 			const results = await search(
 				query,
@@ -68,6 +73,7 @@
 				settingsStore.commentaryFilterEnabled
 			);
 			searchResults = results;
+
 			const fullResult = results.find(
 				(r) => r.vod_content?.trim() && r.vod_content.length > 50 && !r.vod_content.includes('简介')
 			);
@@ -78,20 +84,28 @@
 					.trim();
 			}
 
-			if (settingsStore.autoIntegrateSources && results.length > 0) {
+			const groups = groupByNameAndTags(results);
+			groupedResults = sortGroupsByScore(groups, speedCache, query, isMovieSearch, searchTags);
+
+			if (results.length > 0) {
 				testingSources = true;
-				const testPromises = results.map((r) =>
-					testSourceSpeed(r.source_code).then((speedResult) => ({ speedResult, searchResult: r }))
+				const uniqueSources = [...new Map(results.map((r) => [r.source_code, r])).values()];
+				const speedPromises = uniqueSources.map((r) =>
+					testSourceSpeed(r.source_code).then(
+						(result) => [r.source_code, result] as [string, SpeedTestResult]
+					)
 				);
-				const firstPlayable = await Promise.race(testPromises);
-				if (firstPlayable?.speedResult.status === 'success') {
-					autoSelectedResult = firstPlayable.searchResult;
+				const speedResults = await Promise.race<[string, SpeedTestResult][]>([
+					Promise.all(speedPromises),
+					new Promise<[string, SpeedTestResult][]>((resolve) => setTimeout(() => resolve([]), 3000))
+				]);
+
+				speedCache = new Map(speedCache);
+				for (const [sourceId, result] of speedResults) {
+					speedCache.set(sourceId, result);
 				}
-				const allResults = await Promise.all(testPromises);
-				const anySuccess = allResults.some((r) => r.speedResult.status === 'success');
-				if (!anySuccess) {
-					allSourcesFailed = true;
-				}
+
+				groupedResults = sortGroupsByScore(groups, speedCache, query, isMovieSearch, searchTags);
 				testingSources = false;
 			}
 		} catch (e) {
@@ -101,26 +115,24 @@
 		}
 	}
 
-	function handlePlay(result: SearchResult) {
-		const selectedResult = autoSelectedResult || result;
-		const availableSources: AvailableSource[] = searchResults.map((r) => ({
-			source_code: r.source_code,
-			vod_id: r.vod_id,
-			vod_name: r.vod_name,
-			source_name: r.source_name,
-			vod_pic: r.vod_pic
+	function handlePlay(group: SearchGroup) {
+		const bestSource = group.sources[0];
+		const availableSources: AvailableSource[] = group.sources.map((s) => ({
+			source_code: s.result.source_code,
+			vod_id: s.result.vod_id,
+			vod_name: s.result.vod_name,
+			source_name: s.result.source_name,
+			vod_pic: s.result.vod_pic
 		}));
 		sessionStorage.setItem('availableSources', JSON.stringify(availableSources));
 		onOpenChange(false);
 		goto(
-			`/player?id=${selectedResult.vod_id}&source=${selectedResult.source_code}&title=${encodeURIComponent(selectedResult.vod_name)}`
+			`/player?id=${bestSource.result.vod_id}&source=${bestSource.result.source_code}&title=${encodeURIComponent(group.name)}`
 		);
 	}
 
 	function handleClose() {
 		contentVisible = false;
-		autoSelectedResult = null;
-		allSourcesFailed = false;
 		onOpenChange(false);
 	}
 
@@ -163,6 +175,17 @@
 		if (!originRect) return 'center center';
 		const { top, left, width, height } = originRect;
 		return `${left + width / 2}px ${top + height / 2}px`;
+	}
+
+	function getSourceStatusIcon(scored: ScoredSource): 'fast' | 'slow' | 'pending' {
+		if (scored.speedMs === undefined) return 'pending';
+		return scored.speedMs < 2000 ? 'fast' : 'slow';
+	}
+
+	function formatSpeed(ms: number | undefined): string {
+		if (ms === undefined) return '-';
+		if (ms < 1000) return `${ms}ms`;
+		return `${(ms / 1000).toFixed(1)}s`;
 	}
 </script>
 
@@ -271,7 +294,14 @@
 					<div class="flex w-1/2 flex-col overflow-hidden p-6">
 						<div class="mb-4 flex items-center justify-between">
 							<h3 class="text-lg font-semibold">播放源</h3>
-							<span class="text-sm text-muted-foreground">{searchResults.length} 个结果</span>
+							<span class="flex items-center gap-2 text-sm text-muted-foreground">
+								{#if testingSources}
+									<Zap class="h-4 w-4 animate-pulse text-primary" />
+									<span>测速中...</span>
+								{:else}
+									<span>{groupedResults.length} 个结果</span>
+								{/if}
+							</span>
 						</div>
 
 						<div class="flex-1 overflow-y-auto">
@@ -288,75 +318,88 @@
 										</div>
 									{/each}
 								</div>
-							{:else if searchResults.length === 0}
+							{:else if groupedResults.length === 0}
 								<div class="flex flex-col items-center justify-center py-12 text-muted-foreground">
 									<Film class="mb-2 h-12 w-12 opacity-50" />
 									<p>未找到播放源</p>
 								</div>
-							{:else if allSourcesFailed}
-								<div class="flex flex-col items-center justify-center py-12 text-destructive">
-									<AlertCircle class="mb-2 h-12 w-12 opacity-50" />
-									<p>所有源均无法播放</p>
-									<p class="text-sm text-muted-foreground">请检查网络或稍后重试</p>
-								</div>
 							{:else}
 								<div class="space-y-2 pr-4">
-									{#each searchResults as result (result.vod_id)}
-										{@const isAutoSelected = autoSelectedResult?.vod_id === result.vod_id}
+									{#each groupedResults as group (group.id)}
 										<div
-											class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all focus-within:ring-2 focus-within:ring-ring hover:bg-muted/50
-												{isAutoSelected ? 'border-primary bg-primary/5' : ''}"
+											class="rounded-lg border bg-card transition-all hover:bg-muted/30"
 											role="button"
 											tabindex="0"
-											onclick={() => handlePlay(result)}
-											onkeydown={(e) => e.key === 'Enter' && handlePlay(result)}
+											onclick={() => handlePlay(group)}
+											onkeydown={(e) => e.key === 'Enter' && handlePlay(group)}
 										>
-											{#if result.vod_pic}
-												<CachedImage
-													src={result.vod_pic}
-													alt={result.vod_name}
-													class="h-16 w-12 rounded object-cover"
-												/>
-											{/if}
-											<div class="min-w-0 flex-grow">
-												<p class="truncate font-medium">
-													{result.vod_name}
-													{#if isAutoSelected}
-														<span class="ml-2 text-xs text-primary">(已自动选择)</span>
-													{/if}
-												</p>
-												<div
-													class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
-												>
-													<Badge variant="outline" class="text-xs">{result.source_name}</Badge>
-													{#if result.type_name}
-														<span class="flex items-center gap-1">
-															<Film class="h-3 w-3" />
-															{result.type_name}
+											<div class="flex items-center gap-3 p-3">
+												{#if group.cover}
+													<CachedImage
+														src={group.cover}
+														alt={group.name}
+														class="h-16 w-12 rounded object-cover"
+													/>
+												{/if}
+												<div class="min-w-0 flex-grow">
+													<div class="flex items-center gap-2">
+														<p class="truncate font-medium">{group.name}</p>
+														{#if group.year}
+															<span class="flex items-center gap-1 text-xs text-muted-foreground">
+																<Calendar class="h-3 w-3" />
+																{group.year}
+															</span>
+														{/if}
+													</div>
+													<div
+														class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+													>
+														<Badge variant="outline" class="text-xs">
+															{group.sources.length} 个源
+														</Badge>
+														{#if group.typeName}
+															<span class="flex items-center gap-1">
+																<Film class="h-3 w-3" />
+																{group.typeName}
+															</span>
+														{/if}
+													</div>
+												</div>
+												<div class="flex items-center gap-2">
+													{#if group.sources[0].speedMs !== undefined}
+														<span class="text-xs text-muted-foreground">
+															{formatSpeed(group.sources[0].speedMs)}
 														</span>
 													{/if}
-													{#if result.vod_year}
-														<span class="flex items-center gap-1">
-															<Calendar class="h-3 w-3" />
-															{result.vod_year}
-														</span>
-													{/if}
-													{#if result.vod_remarks}
-														<span class="text-primary">{result.vod_remarks}</span>
-													{/if}
+													<Button size="sm" variant="default">
+														<Play class="mr-1 h-4 w-4" />
+														播放
+													</Button>
 												</div>
 											</div>
-											<Button
-												size="sm"
-												variant={allSourcesFailed ? 'destructive' : 'default'}
-												onclick={(e) => {
-													e.stopPropagation();
-													handlePlay(result);
-												}}
-											>
-												<Play class="mr-1 h-4 w-4" />
-												{allSourcesFailed ? '播放失败' : '播放'}
-											</Button>
+											{#if group.sources.length > 1}
+												<div class="flex flex-wrap gap-1 border-t bg-muted/20 px-3 py-2">
+													{#each group.sources.slice(1) as scored, i}
+														{@const status = getSourceStatusIcon(scored)}
+														<span
+															class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+														>
+															{scored.result.source_name}
+															{#if scored.speedMs !== undefined}
+																<span
+																	class="ml-1 {status === 'fast'
+																		? 'text-green-500'
+																		: status === 'slow'
+																			? 'text-orange-500'
+																			: ''}"
+																>
+																	{formatSpeed(scored.speedMs)}
+																</span>
+															{/if}
+														</span>
+													{/each}
+												</div>
+											{/if}
 										</div>
 									{/each}
 								</div>

@@ -9,6 +9,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { fly } from 'svelte/transition';
 
 	let { children } = $props();
 
@@ -40,14 +41,14 @@
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
-						class="flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
+						class="flex aspect-square w-12 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
 							{active
 							? 'bg-primary/10 text-primary'
 							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
 					>
 						<item.icon class="h-7 w-7" />
 						{#if active}
-							<span class="text-xs">{item.label}</span>
+							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
 						{/if}
 					</a>
 				{/each}
@@ -60,7 +61,7 @@
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
-						class="group flex flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
+						class="group flex aspect-square w-12 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
 							{active
 							? 'bg-primary/10 text-primary'
 							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
@@ -69,7 +70,7 @@
 							class="h-7 w-7 transition-transform duration-200 {active ? 'scale-110' : 'scale-100'}"
 						/>
 						{#if active}
-							<span class="text-xs">{item.label}</span>
+							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
 						{/if}
 					</a>
 				{/each}

@@ -7,8 +7,11 @@
 	import { historyStore } from '$lib/stores/history.svelte';
 	import { parsePlayUrl, getVideoDetail, type VideoDetail } from '$lib/api/search';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
+	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { ArrowLeft, Lock, Unlock, AlertCircle } from 'lucide-svelte';
+	import { toast } from 'svelte-sonner';
+	import type { DoubanSubject } from '$lib/api/douban';
 
 	let title = $state('');
 	let cover = $state('');
@@ -23,6 +26,16 @@
 
 	let playerType: 'native' | 'hls' = $state('native');
 	let playerSrc: string = $state('');
+	let isDesktop = $state(true);
+	let playerKey = $state(0);
+	let showSourceOverlay = $state(false);
+	let overlaySubject = $state<DoubanSubject | null>(null);
+
+	function isMobileDevice(): boolean {
+		if (typeof navigator === 'undefined') return true;
+		const ua = navigator.userAgent.toLowerCase();
+		return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+	}
 
 	interface AvailableSource {
 		source_code: string;
@@ -33,6 +46,7 @@
 	}
 	let availableSources = $state<AvailableSource[]>([]);
 	let currentSourceIndex = $state(0);
+	let failedSources = $state<Set<string>>(new Set());
 
 	async function processVideoUrl(url: string): Promise<{ type: 'native' | 'hls'; url: string }> {
 		const urlClean = url.split('$$$')[0].split('#')[0].trim();
@@ -77,11 +91,28 @@
 		const source = params.get('source');
 		const directUrl = params.get('url');
 		const epIdx = params.get('episodeIndex');
+		const searchQuery = params.get('search');
 
 		title = params.get('title') || '视频播放';
 		cover = params.get('cover') || '';
 
 		if (epIdx) currentEpisodeIndex = parseInt(epIdx, 10);
+
+		if (searchQuery) {
+			overlaySubject = {
+				id: id || searchQuery,
+				title: decodeURIComponent(searchQuery),
+				cover: cover || '',
+				cover_url: cover || '',
+				rate: '',
+				score: '',
+				types: [],
+				regions: []
+			};
+			showSourceOverlay = true;
+			loading = false;
+			return;
+		}
 
 		if (directUrl) {
 			const processed = await processVideoUrl(decodeURIComponent(directUrl));
@@ -128,6 +159,7 @@
 
 	onMount(async () => {
 		autoplayEnabled = settingsStore.autoplayEnabled;
+		isDesktop = !isMobileDevice();
 		const storedSources = sessionStorage.getItem('availableSources');
 		if (storedSources) {
 			try {
@@ -228,14 +260,6 @@
 		controlsLocked = !controlsLocked;
 	}
 
-	async function goBack() {
-		if (window.history.length > 1) {
-			window.history.back();
-		} else {
-			goto('/');
-		}
-	}
-
 	function handleTimeUpdate(currentTime: number, dur: number) {
 		historyStore.updatePosition(
 			$page.url.searchParams.get('id') || '',
@@ -254,8 +278,34 @@
 	}
 
 	function handlePlayerError(errorMsg: string) {
-		console.error('[Player] handlePlayerError called:', errorMsg);
-		error = '视频播放失败';
+		console.error('[Player] Playback error:', errorMsg);
+
+		const currentSource = availableSources[currentSourceIndex];
+		if (currentSource) {
+			failedSources = new Set(failedSources);
+			failedSources.add(currentSource.source_code);
+		}
+
+		const remainingSources = availableSources.filter((s) => !failedSources.has(s.source_code));
+
+		if (remainingSources.length > 0) {
+			const nextSource = remainingSources[0];
+			const nextIndex = availableSources.findIndex((s) => s.source_code === nextSource.source_code);
+			toast.error('播放失败，尝试切换源...');
+			handleSourceChange({ source_code: nextSource.source_code, vod_id: nextSource.vod_id });
+		} else {
+			toast.error('所有源均无法播放');
+			error = '所有源均无法播放';
+		}
+	}
+
+	async function goBack() {
+		toast.error('无法播放，请尝试其他源');
+		if (window.history.length > 1) {
+			window.history.back();
+		} else {
+			goto('/');
+		}
 	}
 </script>
 
@@ -278,7 +328,7 @@
 			poster={cover}
 			{episodes}
 			{currentEpisodeIndex}
-			showFullscreenButton={false}
+			showFullscreenButton={isDesktop}
 			onEpisodeChange={handleEpisodeSelect}
 			onTimeUpdate={handleTimeUpdate}
 			onEnded={handleEnded}
@@ -293,3 +343,14 @@
 		</div>
 	{/if}
 </div>
+
+<VideoSourceOverlay
+	item={overlaySubject}
+	open={showSourceOverlay}
+	onOpenChange={(open) => {
+		showSourceOverlay = open;
+		if (!open) {
+			goBack();
+		}
+	}}
+/>

@@ -1,16 +1,48 @@
 use crate::api::{self, HttpRequestOptions, HttpError};
-use crate::cache;
+use crate::cache::{self, SpeedTestResult};
 use crate::config;
 use crate::m3u8;
-use crate::transcoder::TRANSCODER;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub use crate::api::HttpResponse;
 
 #[tauri::command]
 pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpResponse, HttpError> {
-    api::http_request(options).await
+    const CACHE_TTL_SECS: u64 = 600; // 10 minutes
+    const MAX_CACHE_SIZE: usize = 5 * 1024 * 1024; // 5MB
+
+    let url = options.url.clone();
+
+    // 1. Check cache first for non-media content
+    if let Some(cached) = cache::get_cached(&url, CACHE_TTL_SECS) {
+        let body = match String::from_utf8(cached.data.clone()) {
+            Ok(s) => s,
+            Err(_) => return api::http_request(options).await,
+        };
+        return Ok(HttpResponse {
+            status: 200,
+            headers: HashMap::new(),
+            body,
+            cached: true,
+        });
+    }
+
+    // 2. Make the request
+    let response = api::http_request(options).await?;
+
+    // 3. Cache if it's not a media type and size is acceptable
+    let content_type = response.headers.get("content-type")
+        .map(|h| h.as_str())
+        .unwrap_or("");
+
+    if !content_type.starts_with("video/")
+        && !content_type.starts_with("audio/")
+        && response.body.len() < MAX_CACHE_SIZE
+    {
+        cache::set_cached(&url, response.body.clone().into_bytes(), content_type.to_string());
+    }
+
+    Ok(response)
 }
 
 #[tauri::command]
@@ -158,31 +190,27 @@ pub async fn fetch_hls_segment(url: String) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 pub fn cache_clear() {
-    cache::clear_cache();
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CacheStats {
-    mem_count: usize,
-    mem_size: usize,
-    disk_count: usize,
-    disk_size: usize,
+    cache::clear_all_caches();
 }
 
 #[tauri::command]
-pub fn cache_stats() -> CacheStats {
-    let (mem_count, mem_size, disk_count, disk_size) = cache::get_cache_stats();
-    CacheStats {
-        mem_count,
-        mem_size,
-        disk_count,
-        disk_size,
-    }
+pub fn cache_stats() -> cache::CacheStats {
+    cache::get_cache_stats()
 }
 
 #[tauri::command]
 pub async fn test_source_speed(source_id: String, custom_url: Option<String>) -> SpeedTestResult {
     use std::time::Instant;
+
+    let cache_key = if source_id == "custom" {
+        format!("speed_custom_{}", custom_url.as_deref().unwrap_or(""))
+    } else {
+        format!("speed_{}", source_id)
+    };
+
+    if let Some(cached) = cache::get_speed_cached(&cache_key) {
+        return cached;
+    }
 
     let (api_base_url, source_name) = if source_id == "custom" {
         let url = custom_url.unwrap_or_default();
@@ -219,34 +247,30 @@ pub async fn test_source_speed(source_id: String, custom_url: Option<String>) ->
             let elapsed = start.elapsed();
             let body_size_kb = (resp.body.len() as f64) / 1024.0;
             let elapsed_secs = elapsed.as_secs_f64();
-            SpeedTestResult {
-                source_id,
+            let result = SpeedTestResult {
+                source_id: source_id.clone(),
                 source_name,
                 latency_ms: elapsed.as_millis() as u64,
                 download_speed_kbps: if elapsed_secs > 0.0 { body_size_kb / elapsed_secs } else { 0.0 },
                 status: "success".to_string(),
                 error: None,
-            }
+            };
+            cache::set_speed_cached(&cache_key, result.clone());
+            result
         }
-        Err(e) => SpeedTestResult {
-            source_id,
-            source_name,
-            latency_ms: start.elapsed().as_millis() as u64,
-            download_speed_kbps: 0.0,
-            status: "error".to_string(),
-            error: Some(e.error),
-        },
+        Err(e) => {
+            let result = SpeedTestResult {
+                source_id: source_id.clone(),
+                source_name,
+                latency_ms: start.elapsed().as_millis() as u64,
+                download_speed_kbps: 0.0,
+                status: "error".to_string(),
+                error: Some(e.error),
+            };
+            cache::set_speed_cached(&cache_key, result.clone());
+            result
+        }
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SpeedTestResult {
-    source_id: String,
-    source_name: String,
-    latency_ms: u64,
-    download_speed_kbps: f64,
-    status: String,
-    error: Option<String>,
 }
 
 fn base64_encode(data: &[u8]) -> String {
@@ -272,61 +296,3 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct TranscoderInfo {
-    pub url: String,
-    pub port: u16,
-    pub duration: Option<f64>,
-    pub vaapi_available: bool,
-    pub ffmpeg_available: bool,
-}
-
-#[tauri::command]
-pub fn check_transcoder() -> TranscoderInfo {
-    let manager = TRANSCODER.lock().unwrap();
-    let (vaapi, ffmpeg, _) = manager.check_system();
-    TranscoderInfo {
-        url: String::new(),
-        port: 0,
-        duration: None,
-        vaapi_available: vaapi,
-        ffmpeg_available: ffmpeg,
-    }
-}
-
-#[tauri::command]
-pub fn start_transcoded_stream(
-    id: String,
-    m3u8_url: String,
-    referer: Option<String>,
-) -> Result<TranscoderInfo, String> {
-    let (vaapi_available, ffmpeg_available) = {
-        let manager = TRANSCODER.lock().unwrap();
-        let (vaapi, ffmpeg, _) = manager.check_system();
-        (vaapi, ffmpeg)
-    };
-
-    if !ffmpeg_available {
-        return Err("ffmpeg not available".to_string());
-    }
-
-    let stream_info = crate::transcoder::run_streaming_transcoder(
-        id,
-        m3u8_url,
-        referer,
-    )?;
-
-    Ok(TranscoderInfo {
-        url: stream_info.url,
-        port: stream_info.port,
-        duration: stream_info.duration,
-        vaapi_available,
-        ffmpeg_available,
-    })
-}
-
-#[tauri::command]
-pub fn stop_transcoded_stream(id: String) {
-    let mut manager = TRANSCODER.lock().unwrap();
-    manager.stop_stream(&id);
-}
