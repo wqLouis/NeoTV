@@ -26,6 +26,7 @@
 		initialPosition?: number;
 		episodes?: Episode[];
 		currentEpisodeIndex?: number;
+		currentSourceIndex?: number;
 		playbackRate?: number;
 		availableSources?: { source_code: string; source_name: string }[];
 		showFullscreenButton?: boolean;
@@ -47,6 +48,7 @@
 		initialPosition = 0,
 		episodes = [],
 		currentEpisodeIndex = 0,
+		currentSourceIndex = 0,
 		playbackRate = 1,
 		availableSources = [],
 		showFullscreenButton = true,
@@ -81,11 +83,8 @@
 	const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 	const LONG_PRESS_DURATION = 300;
 
-	let lastClickTime = 0;
-	let lastClickTarget: HTMLElement | null = null;
 	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 	let longPressTriggered = false;
-	let seekActive = $state(false);
 	let seekingTime = $state<number | undefined>(undefined);
 
 	let isUnmounting = $state(false);
@@ -93,25 +92,11 @@
 	function showControlsTemporarily() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
-		if (!seekActive) {
-			controlsTimeout = setTimeout(() => {
-				if (!videoEl?.paused && !seekActive) {
-					showControls = false;
-				}
-			}, 3000);
-		}
-	}
-
-	function handleSeekStart() {
-		seekActive = true;
-		seekingTime = localCurrentTime;
-		clearTimeout(controlsTimeout);
-	}
-
-	function handleSeekEnd() {
-		seekActive = false;
-		seekingTime = undefined;
-		showControlsTemporarily();
+		controlsTimeout = setTimeout(() => {
+			if (!videoEl?.paused) {
+				showControls = false;
+			}
+		}, 3000);
 	}
 
 	function togglePlay() {
@@ -122,30 +107,6 @@
 			videoEl.pause();
 		}
 		showControlsTemporarily();
-	}
-
-	function handleVideoClick(e: MouseEvent) {
-		if (longPressTriggered) {
-			longPressTriggered = false;
-			return;
-		}
-
-		if ((e.target as HTMLElement).closest('input, button')) {
-			return;
-		}
-
-		const now = Date.now();
-		if (now - lastClickTime < 300 && lastClickTarget === e.target) {
-			return;
-		}
-		lastClickTime = now;
-		lastClickTarget = e.target as HTMLElement;
-
-		if (showControls) {
-			showControls = false;
-		} else {
-			showControlsTemporarily();
-		}
 	}
 
 	function handleVideoDoubleClick(e: MouseEvent) {
@@ -169,16 +130,6 @@
 		muted = videoEl.muted;
 	}
 
-	function handleVolumeChange(e: Event) {
-		const target = e.target as HTMLInputElement;
-		const value = parseFloat(target.value);
-		if (videoEl) {
-			videoEl.volume = value;
-			volume = value;
-			muted = value === 0;
-		}
-	}
-
 	function toggleFullscreen() {
 		if (!containerEl) return;
 		if (document.fullscreenElement) {
@@ -193,9 +144,8 @@
 		longPressTriggered = false;
 		longPressTimer = setTimeout(() => {
 			if (videoEl) {
-				setPlaybackRate(2);
+				setPlaybackRate(localPlaybackRate * 2);
 				longPressTriggered = true;
-				showControlsTemporarily();
 			}
 		}, LONG_PRESS_DURATION);
 	}
@@ -205,8 +155,8 @@
 			clearTimeout(longPressTimer);
 			longPressTimer = null;
 		}
-		if (videoEl && localPlaybackRate === 2) {
-			setPlaybackRate(1);
+		if (videoEl && localPlaybackRate > 1) {
+			setPlaybackRate(localPlaybackRate / 2);
 		}
 		longPressTriggered = false;
 	}
@@ -489,17 +439,6 @@
 		}
 	}
 
-	function initNative() {
-		console.log('[HLS] initNative called:', { src, autoplay });
-		if (!src) return;
-		loading = false;
-		videoEl.src = src;
-		if (autoplay) {
-			videoEl.play().catch(() => {});
-		}
-		onReady?.();
-	}
-
 	onMount(() => {
 		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl });
 		if (type === 'native' && src) {
@@ -575,6 +514,7 @@
 	show={showPopup}
 	playbackRate={localPlaybackRate}
 	{availableSources}
+	{currentSourceIndex}
 	{episodes}
 	{currentEpisodeIndex}
 	speedOptions={SPEED_OPTIONS}
@@ -612,7 +552,7 @@
 		</div>
 	{/if}
 
-	{#if localPlaybackRate === 2}
+	{#if localPlaybackRate > 1}
 		<div
 			class="pointer-events-none absolute inset-0 z-40 flex items-start justify-center pt-16"
 			transition:fade={{ duration: 200 }}
@@ -627,7 +567,7 @@
 				>
 					<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 				</svg>
-				<span class="text-sm font-medium text-white">2x</span>
+				<span class="text-sm font-medium text-white">{localPlaybackRate}x</span>
 			</div>
 		</div>
 	{/if}
@@ -638,7 +578,6 @@
 		{poster}
 		class="h-full w-full select-none"
 		playsinline
-		onclick={handleVideoClick}
 		onplay={handlePlay}
 		onpause={handlePause}
 		ontimeupdate={handleTimeUpdate}

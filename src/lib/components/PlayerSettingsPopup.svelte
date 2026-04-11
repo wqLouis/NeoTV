@@ -16,6 +16,7 @@
 		show: boolean;
 		playbackRate: number;
 		availableSources: Source[];
+		currentSourceIndex?: number;
 		episodes: Episode[];
 		currentEpisodeIndex: number;
 		speedOptions: readonly number[];
@@ -29,6 +30,7 @@
 		show,
 		playbackRate,
 		availableSources,
+		currentSourceIndex = 0,
 		episodes,
 		currentEpisodeIndex,
 		speedOptions,
@@ -77,13 +79,16 @@
 					</div>
 				</div>
 
-				{#if availableSources && availableSources.length > 1}
+				{#if availableSources && availableSources.length > 0}
 					<div class="mb-4">
 						<span class="mb-2 block text-xs text-white/60">源选择</span>
 						<div class="flex flex-wrap gap-2">
-							{#each availableSources as source (source.source_code)}
+							{#each availableSources as source, i (source.source_code)}
 								<button
-									class="rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition-colors hover:bg-white/20"
+									class="rounded-md px-3 py-1.5 text-sm transition-colors
+										{i === currentSourceIndex
+										? 'bg-primary text-primary-foreground'
+										: 'bg-white/10 text-white hover:bg-white/20'}"
 									onclick={() => onSourceChange?.(source)}
 								>
 									{source.source_name}

@@ -34,6 +34,27 @@ jobs:
           rm -rf src-tauri/gen/android
           bunx tauri android init --ci
 
+      - name: Copy custom Android files
+        run: |
+          # MainActivity
+          cp -f src-tauri/mobile/android/app/src/main/java/com/neotv/app/MainActivity.kt \
+                src-tauri/gen/android/app/src/main/java/com/neotv/app/
+
+          # Themes
+          cp -f src-tauri/mobile/android/app/src/main/res/values/themes.xml \
+                src-tauri/gen/android/app/src/main/res/values/
+          cp -f src-tauri/mobile/android/app/src/main/res/values-night/themes.xml \
+                src-tauri/gen/android/app/src/main/res/values-night/ 2>/dev/null || true
+
+          # Icons - replace default launcher icons with custom ones
+          for dir in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            # Use our 512x512 icon as the base launcher icon
+            cp -f src-tauri/icons/icon.png \
+                  src-tauri/gen/android/app/src/main/res/mipmap-${dir}/ic_launcher.png 2>/dev/null || true
+            cp -f src-tauri/icons/icon.png \
+                  src-tauri/gen/android/app/src/main/res/mipmap-${dir}/ic_launcher_round.png 2>/dev/null || true
+          done
+
       - name: Build frontend
         run: bun run build
 

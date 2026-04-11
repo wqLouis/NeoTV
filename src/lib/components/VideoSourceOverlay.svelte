@@ -11,16 +11,21 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, X, Calendar, Film, Info, Users, Heart, AlertCircle, Zap } from 'lucide-svelte';
+	import { Play, X, Calendar, Film, Info, Users, Heart, Zap } from 'lucide-svelte';
 	import { fly, fade, scale } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
-	import { onMount } from 'svelte';
 
 	interface Props {
 		item: DoubanSubject | null;
 		open: boolean;
 		originRect?: DOMRect | null;
 		onOpenChange: (open: boolean) => void;
+		onPlay?: (params: {
+			id: string;
+			source: string;
+			title: string;
+			sources: AvailableSource[];
+		}) => void;
 	}
 
 	interface AvailableSource {
@@ -31,22 +36,19 @@
 		vod_pic?: string;
 	}
 
-	let { item, open = $bindable(false), originRect = null, onOpenChange }: Props = $props();
+	let { item, open = $bindable(false), originRect = null, onOpenChange, onPlay }: Props = $props();
 
 	let loading = $state(false);
 	let testingSources = $state(false);
-	let searchResults = $state<SearchResult[]>([]);
 	let groupedResults = $state<SearchGroup[]>([]);
 	let speedCache = $state<Map<string, SpeedTestResult>>(new Map());
-	let contentVisible = $state(false);
 	let selectedDescription = $state('');
-	let overlayDidOpen = $state(false);
 
 	async function searchSources(query: string) {
 		loading = true;
-		searchResults = [];
 		groupedResults = [];
 		selectedDescription = '';
+
 		const isMovieSearch =
 			item?.types?.some((t) => t.includes('电影') || t.includes('film')) ?? false;
 		const searchTags = item?.types ?? [];
@@ -59,7 +61,6 @@
 				settingsStore.yellowFilterEnabled,
 				settingsStore.commentaryFilterEnabled
 			);
-			searchResults = results;
 
 			const fullResult = results.find(
 				(r) => r.vod_content?.trim() && r.vod_content.length > 50 && !r.vod_content.includes('简介')
@@ -82,7 +83,7 @@
 						(result) => [r.source_code, result] as [string, SpeedTestResult]
 					)
 				);
-				const speedResults = await Promise.race<[string, SpeedTestResult][]>([
+				const speedResults = await Promise.race([
 					Promise.all(speedPromises),
 					new Promise<[string, SpeedTestResult][]>((resolve) => setTimeout(() => resolve([]), 3000))
 				]);
@@ -91,14 +92,13 @@
 				for (const [sourceId, result] of speedResults) {
 					speedCache.set(sourceId, result);
 				}
-
 				groupedResults = sortGroupsByScore(groups, speedCache, query, isMovieSearch, searchTags);
-				testingSources = false;
 			}
 		} catch (e) {
 			console.error('Search failed:', e);
 		} finally {
 			loading = false;
+			testingSources = false;
 		}
 	}
 
@@ -111,19 +111,29 @@
 			source_name: s.result.source_name,
 			vod_pic: s.result.vod_pic
 		}));
+
 		sessionStorage.setItem('availableSources', JSON.stringify(availableSources));
 		onOpenChange(false);
-		goto(
-			`/player?id=${bestSource.result.vod_id}&source=${bestSource.result.source_code}&title=${encodeURIComponent(group.name)}`
-		);
+
+		if (onPlay) {
+			onPlay({
+				id: bestSource.result.vod_id,
+				source: bestSource.result.source_code,
+				title: group.name,
+				sources: availableSources
+			});
+		} else {
+			goto(
+				`/player?id=${bestSource.result.vod_id}&source=${bestSource.result.source_code}&title=${encodeURIComponent(group.name)}`
+			);
+		}
 	}
 
 	function handleClose() {
-		contentVisible = false;
 		onOpenChange(false);
 	}
 
-	function handleAddToFavorites() {
+	function handleToggleFavorite() {
 		if (!item) return;
 		if (favouritesStore.has(item.id, 'douban')) {
 			favouritesStore.remove(item.id, 'douban');
@@ -142,19 +152,9 @@
 	$effect(() => {
 		if (item && open) {
 			searchSources(item.title);
-			setTimeout(() => {
-				contentVisible = true;
-			}, 50);
 			document.body.style.overflow = 'hidden';
-			overlayDidOpen = true;
-			history.pushState(null, '', location.href);
 		} else {
-			contentVisible = false;
 			document.body.style.overflow = '';
-			if (overlayDidOpen) {
-				overlayDidOpen = false;
-				history.back();
-			}
 		}
 	});
 
@@ -171,8 +171,7 @@
 
 	function formatSpeed(ms: number | undefined): string {
 		if (ms === undefined) return '-';
-		if (ms < 1000) return `${ms}ms`;
-		return `${(ms / 1000).toFixed(1)}s`;
+		return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 	}
 </script>
 
@@ -195,7 +194,7 @@
 			class="relative z-10 flex h-screen w-full overflow-hidden bg-card shadow-2xl"
 			transition:fly={{ duration: 300, y: 30, opacity: 0 }}
 		>
-			{#if contentVisible && item}
+			{#if item}
 				<div class="flex h-full w-full">
 					<div class="flex w-1/2 flex-col overflow-hidden border-r">
 						<div class="flex items-center justify-between border-b p-4">
@@ -204,7 +203,7 @@
 								<Button
 									variant="ghost"
 									size="icon"
-									onclick={handleAddToFavorites}
+									onclick={handleToggleFavorite}
 									title={favouritesStore.has(item.id, 'douban') ? '取消收藏' : '添加到收藏'}
 								>
 									<Heart
@@ -366,7 +365,7 @@
 											</div>
 											{#if group.sources.length > 1}
 												<div class="flex flex-wrap gap-1 border-t bg-muted/20 px-3 py-2">
-													{#each group.sources.slice(1) as scored, i}
+													{#each group.sources.slice(1) as scored}
 														{@const status = getSourceStatusIcon(scored)}
 														<span
 															class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"

@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { invoke } from '@tauri-apps/api/core';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { historyStore } from '$lib/stores/history.svelte';
@@ -13,6 +14,14 @@
 	import { toast } from 'svelte-sonner';
 	import type { DoubanSubject } from '$lib/api/douban';
 
+	interface AvailableSource {
+		source_code: string;
+		vod_id: string;
+		vod_name: string;
+		source_name: string;
+		vod_pic?: string;
+	}
+
 	let title = $state('');
 	let cover = $state('');
 	let initialPosition = $state(0);
@@ -20,7 +29,6 @@
 	let currentEpisodeIndex = $state(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let controlsLocked = $state(false);
 	let autoplayEnabled = $state(true);
 	let videoDetail = $state<VideoDetail | null>(null);
 	let containerEl: HTMLDivElement;
@@ -30,6 +38,9 @@
 	let isDesktop = $state(true);
 	let showSourceOverlay = $state(false);
 	let overlaySubject = $state<DoubanSubject | null>(null);
+	let availableSources = $state<AvailableSource[]>([]);
+	let currentSourceIndex = $state(0);
+	let failedSources = $state<Set<string>>(new Set());
 
 	function isMobileDevice(): boolean {
 		if (typeof navigator === 'undefined') return true;
@@ -37,29 +48,15 @@
 		return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
 	}
 
-	interface AvailableSource {
-		source_code: string;
-		vod_id: string;
-		vod_name: string;
-		source_name: string;
-		vod_pic?: string;
-	}
-	let availableSources = $state<AvailableSource[]>([]);
-	let currentSourceIndex = $state(0);
-	let failedSources = $state<Set<string>>(new Set());
-
 	async function processVideoUrl(url: string): Promise<{ type: 'native' | 'hls'; url: string }> {
 		const urlClean = url.split('$$$')[0].split('#')[0].trim();
 		const isM3U8 = urlClean.toLowerCase().includes('.m3u8') || urlClean.includes('m3u8');
-		console.log('[Player] processVideoUrl called:', { originalUrl: url, url: urlClean, isM3U8 });
 
 		if (!isM3U8) {
-			console.log('[Player] Not M3U8, using native player');
 			return { type: 'native', url: urlClean };
 		}
 
 		try {
-			console.log('[Player] Calling Rust fetch_media_url...');
 			const result = await invoke<{
 				url: string;
 				content_type: string;
@@ -67,23 +64,34 @@
 				processed_content: string | null;
 			}>('fetch_media_url', { url: urlClean, adFiltering: settingsStore.adFilteringEnabled });
 
-			console.log('[Player] Rust response:', {
-				url: result.url,
-				content_type: result.content_type,
-				is_m3u8: result.is_m3u8,
-				hasProcessedContent: !!result.processed_content
-			});
-
-			if (result.processed_content) {
-				return { type: 'hls', url: result.url };
-			}
-
 			return { type: 'hls', url: result.url };
 		} catch (e) {
 			console.warn('[Player] Rust failed to process M3U8, using hls.js fallback:', e);
 			return { type: 'hls', url: urlClean };
 		}
 	}
+
+	async function writeHistory(
+		id: string,
+		videoTitle: string,
+		source: string,
+		videoCover: string,
+		episode?: string,
+		episodeIdx?: number
+	) {
+		await historyStore.add({
+			id,
+			title: videoTitle,
+			source,
+			cover: videoCover,
+			episode,
+			episodeIndex: episodeIdx,
+			position: 0,
+			duration: 0
+		});
+	}
+
+	let unlistenBackButton: UnlistenFn | null = null;
 
 	async function loadVideoDetail() {
 		const params = $page.url.searchParams;
@@ -127,11 +135,13 @@
 		if (id && source) {
 			try {
 				const detail = await getVideoDetail(id, source);
-				if (detail && detail.list && detail.list.length > 0) {
+				if (detail?.list?.[0]) {
 					videoDetail = detail;
 					const video = detail.list[0];
 					title = video.vod_name || title;
 					cover = video.vod_pic || cover;
+
+					await writeHistory(id, title, source, cover);
 
 					const parsedEpisodes = parsePlayUrl(video.vod_play_url);
 					if (parsedEpisodes.length > 0) {
@@ -159,9 +169,50 @@
 		loading = false;
 	}
 
+	async function handleOverlayPlay(params: {
+		id: string;
+		source: string;
+		title: string;
+		sources: AvailableSource[];
+	}) {
+		availableSources = params.sources;
+		const idx = params.sources.findIndex((s) => s.source_code === params.source);
+		if (idx >= 0) currentSourceIndex = idx;
+		showSourceOverlay = false;
+
+		try {
+			const detail = await getVideoDetail(params.id, params.source);
+			if (detail?.list?.[0]) {
+				videoDetail = detail;
+				const video = detail.list[0];
+				title = video.vod_name || params.title;
+				cover = video.vod_pic || '';
+
+				await writeHistory(params.id, title, params.source, cover);
+
+				const parsedEpisodes = parsePlayUrl(video.vod_play_url);
+				if (parsedEpisodes.length > 0) {
+					episodes = parsedEpisodes;
+					currentEpisodeIndex = 0;
+					const processed = await processVideoUrl(episodes[0].url);
+					playerSrc = processed.url;
+					playerType = processed.type;
+				} else {
+					error = '该视频暂无播放地址';
+				}
+			} else {
+				error = '无法获取视频详情';
+			}
+		} catch (e) {
+			console.error('Failed to load from overlay:', e);
+			error = '加载视频详情失败';
+		}
+	}
+
 	onMount(async () => {
 		autoplayEnabled = settingsStore.autoplayEnabled;
 		isDesktop = !isMobileDevice();
+
 		const storedSources = sessionStorage.getItem('availableSources');
 		if (storedSources) {
 			try {
@@ -170,7 +221,24 @@
 				availableSources = [];
 			}
 		}
+
+		unlistenBackButton = await listen('navigate', () => {
+			if (playerSrc && !showSourceOverlay) {
+				playerSrc = '';
+				showSourceOverlay = true;
+			}
+		});
+
+		window.addEventListener('popstate', handleBackNavigation);
+
 		await loadVideoDetail();
+	});
+
+	onDestroy(() => {
+		if (unlistenBackButton) {
+			unlistenBackButton();
+		}
+		window.removeEventListener('popstate', handleBackNavigation);
 	});
 
 	async function handleEpisodeSelect(episode: { episode: string; url: string }, index: number) {
@@ -181,8 +249,9 @@
 		playerSrc = processed.url;
 		playerType = processed.type;
 
+		const id = $page.url.searchParams.get('id') || '';
 		await historyStore.add({
-			id: $page.url.searchParams.get('id') || '',
+			id,
 			title,
 			source: $page.url.searchParams.get('source') || '',
 			cover,
@@ -217,6 +286,7 @@
 				const parsedEpisodes = parsePlayUrl(video.vod_play_url);
 				episodes = parsedEpisodes;
 				currentEpisodeIndex = 0;
+
 				if (episodes.length > 0) {
 					const processed = await processVideoUrl(episodes[0].url);
 					playerSrc = processed.url;
@@ -224,16 +294,15 @@
 				} else {
 					error = '该视频暂无播放地址';
 				}
-				await historyStore.add({
-					id: vodId,
-					title: video.vod_name,
-					source: sourceCode,
-					cover: video.vod_pic,
-					episode: episodes[0]?.episode || '第1集',
-					episodeIndex: 0,
-					position: 0,
-					duration: 0
-				});
+
+				await writeHistory(
+					vodId,
+					video.vod_name,
+					sourceCode,
+					video.vod_pic,
+					episodes[0]?.episode || '第1集',
+					0
+				);
 			} else {
 				error = '无法获取视频详情';
 			}
@@ -245,13 +314,10 @@
 		loading = false;
 	}
 
-	function toggleControlsLock() {
-		controlsLocked = !controlsLocked;
-	}
-
 	function handleTimeUpdate(currentTime: number, dur: number) {
+		const id = $page.url.searchParams.get('id') || '';
 		historyStore.updatePosition(
-			$page.url.searchParams.get('id') || '',
+			id,
 			$page.url.searchParams.get('source') || '',
 			episodes[currentEpisodeIndex]?.episode,
 			currentTime,
@@ -279,7 +345,6 @@
 
 		if (remainingSources.length > 0) {
 			const nextSource = remainingSources[0];
-			const nextIndex = availableSources.findIndex((s) => s.source_code === nextSource.source_code);
 			toast.error('播放失败，尝试切换源...');
 			handleSourceChange({ source_code: nextSource.source_code, vod_id: nextSource.vod_id });
 		} else {
@@ -288,14 +353,18 @@
 		}
 	}
 
-	async function goBack() {
-		if (error && !loading) {
-			toast.error('无法播放，请尝试其他源');
-		}
+	function goBack() {
 		if (window.history.length > 1) {
 			window.history.back();
 		} else {
 			goto('/');
+		}
+	}
+
+	function handleBackNavigation() {
+		if (playerSrc) {
+			playerSrc = '';
+			showSourceOverlay = true;
 		}
 	}
 </script>
@@ -320,6 +389,7 @@
 			{initialPosition}
 			{episodes}
 			{currentEpisodeIndex}
+			{currentSourceIndex}
 			showFullscreenButton={isDesktop}
 			onEpisodeChange={handleEpisodeSelect}
 			onTimeUpdate={handleTimeUpdate}
@@ -341,10 +411,6 @@
 <VideoSourceOverlay
 	item={overlaySubject}
 	open={showSourceOverlay}
-	onOpenChange={(open) => {
-		showSourceOverlay = open;
-		if (!open) {
-			goBack();
-		}
-	}}
+	onOpenChange={(open) => (showSourceOverlay = open)}
+	onPlay={handleOverlayPlay}
 />

@@ -28,7 +28,6 @@
 	let showSourceOverlay = $state(false);
 	let selectedCardRect: DOMRect | null = $state(null);
 
-	let sortBy = $state('U');
 	let range = $state('0,10');
 	let selectedGenre = $state('');
 	let selectedCountry = $state('');
@@ -51,11 +50,6 @@
 		'印度',
 		'泰国',
 		'其他'
-	];
-	const sortOptions = [
-		{ value: 'U', label: '综合' },
-		{ value: 'T', label: '评分最高' },
-		{ value: 'S', label: '评价最多' }
 	];
 	const ratingOptions = [
 		{ value: '0,10', label: '全部' },
@@ -99,14 +93,14 @@
 		} else {
 			try {
 				const sortMap: Record<DoubanQuickFilter, string> = {
-					hot: 'U',
-					new: 'S',
-					top: 'T'
+					hot: 'T',
+					new: 'R',
+					top: 'S'
 				};
 				doubanResults = await searchDouban({
 					sort: sortMap[doubanQuickFilter],
 					range: range,
-					tags: selectedGenre || undefined,
+					genres: selectedGenre || undefined,
 					countries: selectedCountry || undefined,
 					type: selectedType
 				});
@@ -217,11 +211,11 @@
 				</div>
 
 				<div class="scrollbar-hide flex gap-2 overflow-x-auto pb-2">
-					<Select type="single" bind:value={selectedGenre as never}>
+					<Select type="single" bind:value={selectedGenre}>
 						<SelectTrigger
 							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
 						>
-							{#if !selectedGenre}<span class="text-muted-foreground">类型</span>{/if}
+							{selectedGenre || '类型'}
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">全部</SelectItem>
@@ -231,11 +225,11 @@
 						</SelectContent>
 					</Select>
 
-					<Select type="single" bind:value={selectedCountry as never}>
+					<Select type="single" bind:value={selectedCountry}>
 						<SelectTrigger
 							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
 						>
-							{#if !selectedCountry}<span class="text-muted-foreground">地区</span>{/if}
+							{selectedCountry || '地区'}
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">全部</SelectItem>
@@ -245,14 +239,11 @@
 						</SelectContent>
 					</Select>
 
-					<Select type="single" bind:value={range as never}>
+					<Select type="single" bind:value={range}>
 						<SelectTrigger
 							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
 						>
-							{#if range === '0,10'}全部{/if}
-							{#if range === '9,10'}9分以上{/if}
-							{#if range === '8,10'}8分以上{/if}
-							{#if range === '7,10'}7分以上{/if}
+							{ratingOptions.find((o) => o.value === range)?.label || '评分'}
 						</SelectTrigger>
 						<SelectContent>
 							{#each ratingOptions as option}
