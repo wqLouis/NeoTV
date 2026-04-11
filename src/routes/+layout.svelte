@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import { onMount } from 'svelte';
-	import { Home, Search, History, Heart, Settings } from 'lucide-svelte';
+	import { Home, Search, History, Heart, Settings, LayoutGrid } from 'lucide-svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import './layout.css';
@@ -16,6 +16,7 @@
 	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
 	const lowerNav = [
 		{ href: '/', label: '首页', icon: Home },
+		{ href: '/browse', label: '浏览', icon: LayoutGrid },
 		{ href: '/history', label: '历史', icon: History },
 		{ href: '/favourites', label: '收藏', icon: Heart },
 		{ href: '/settings', label: '设置', icon: Settings }
