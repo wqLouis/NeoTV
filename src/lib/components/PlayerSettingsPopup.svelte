@@ -48,7 +48,9 @@
 	<div
 		class="fixed top-0 right-0 z-60 h-full w-72 overflow-hidden bg-black/95 backdrop-blur-sm"
 		role="dialog"
-		onclick={(e) => e.stopPropagation()}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) onClose();
+		}}
 		transition:fly={{ x: 288, duration: 300 }}
 	>
 		<div class="flex h-full flex-col p-4">
@@ -94,16 +96,16 @@
 				{#if episodes.length > 0}
 					<div class="overflow-y-auto">
 						<span class="mb-2 block text-xs text-white/60">选集 ({episodes.length})</span>
-						<div class="grid grid-cols-5 gap-2 sm:grid-cols-6">
+						<div class="grid grid-cols-4 gap-2">
 							{#each episodes as episode, i (episode.url)}
 								<button
-									class="rounded-md px-2 py-1.5 text-center text-xs transition-colors
+									class="min-w-0 rounded-md px-2 py-2 text-center text-xs transition-colors
 										{i === currentEpisodeIndex
 										? 'bg-primary text-primary-foreground'
 										: 'bg-white/10 text-white hover:bg-white/20'}"
 									onclick={() => onEpisodeSelect(episode, i)}
 								>
-									{episode.episode}
+									<span class="block truncate">{episode.episode}</span>
 								</button>
 							{/each}
 						</div>

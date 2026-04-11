@@ -6,10 +6,12 @@
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import VideoCard from '$lib/components/VideoCard.svelte';
+	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import { X, Clock, Trash2 } from 'lucide-svelte';
 
 	type SearchMode = 'api' | 'douban';
@@ -21,6 +23,9 @@
 	let hasSearched = $state(false);
 	let apiResults = $state<SearchResult[]>([]);
 	let doubanResults = $state<DoubanSubject[]>([]);
+	let selectedVideo: DoubanSubject | null = $state(null);
+	let showSourceOverlay = $state(false);
+	let selectedCardRect: DOMRect | null = $state(null);
 
 	let sortBy = $state('U');
 	let range = $state('0,10');
@@ -137,6 +142,13 @@
 			handleSearch('');
 		}
 	});
+
+	function handleVideoClick(item: DoubanSubject, event: MouseEvent) {
+		const target = event.currentTarget as HTMLDivElement;
+		selectedCardRect = target.getBoundingClientRect();
+		selectedVideo = item;
+		showSourceOverlay = true;
+	}
 </script>
 
 <div class="container mx-auto px-4 py-4">
@@ -181,34 +193,49 @@
 				</div>
 
 				<div class="scrollbar-hide flex gap-2 overflow-x-auto pb-2">
-					<select
-						bind:value={selectedGenre}
-						class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
-					>
-						<option value="">类型</option>
-						{#each genres as genre}
-							<option value={genre}>{genre}</option>
-						{/each}
-					</select>
+					<Select type="single" bind:value={selectedGenre as never}>
+						<SelectTrigger
+							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
+						>
+							{#if !selectedGenre}<span class="text-muted-foreground">类型</span>{/if}
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">全部</SelectItem>
+							{#each genres as genre}
+								<SelectItem value={genre}>{genre}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
 
-					<select
-						bind:value={selectedCountry}
-						class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
-					>
-						<option value="">地区</option>
-						{#each countries as country}
-							<option value={country}>{country}</option>
-						{/each}
-					</select>
+					<Select type="single" bind:value={selectedCountry as never}>
+						<SelectTrigger
+							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
+						>
+							{#if !selectedCountry}<span class="text-muted-foreground">地区</span>{/if}
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">全部</SelectItem>
+							{#each countries as country}
+								<SelectItem value={country}>{country}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
 
-					<select
-						bind:value={range}
-						class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
-					>
-						{#each ratingOptions as option}
-							<option value={option.value}>{option.label}</option>
-						{/each}
-					</select>
+					<Select type="single" bind:value={range as never}>
+						<SelectTrigger
+							class="h-9 shrink-0 rounded-md border border-input bg-transparent px-3 text-sm"
+						>
+							{#if range === '0,10'}全部{/if}
+							{#if range === '9,10'}9分以上{/if}
+							{#if range === '8,10'}8分以上{/if}
+							{#if range === '7,10'}7分以上{/if}
+						</SelectTrigger>
+						<SelectContent>
+							{#each ratingOptions as option}
+								<SelectItem value={option.value}>{option.label}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
 
 					<Button size="sm" class="h-9 shrink-0" onclick={() => handleSearch('')}>筛选</Button>
 				</div>
@@ -285,28 +312,10 @@
 			{#each doubanResults as item (item.id)}
 				<div
 					class="cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
-					onclick={() => {
-						const params = new URLSearchParams({
-							id: item.id,
-							source: 'douban',
-							title: item.title,
-							cover: item.cover_url || ''
-						});
-						window.location.href = `/player?${params.toString()}`;
-					}}
+					onclick={(e) => handleVideoClick(item, e)}
 					role="button"
 					tabindex="0"
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							const params = new URLSearchParams({
-								id: item.id,
-								source: 'douban',
-								title: item.title,
-								cover: item.cover_url || ''
-							});
-							window.location.href = `/player?${params.toString()}`;
-						}
-					}}
+					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e as unknown as MouseEvent)}
 				>
 					<div class="relative aspect-[2/3] w-full overflow-hidden">
 						<CachedImage
@@ -341,6 +350,13 @@
 		</div>
 	{/if}
 </div>
+
+<VideoSourceOverlay
+	item={selectedVideo}
+	originRect={selectedCardRect}
+	bind:open={showSourceOverlay}
+	onOpenChange={(open) => (showSourceOverlay = open)}
+/>
 
 <style>
 	.scrollbar-hide::-webkit-scrollbar {

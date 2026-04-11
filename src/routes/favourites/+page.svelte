@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { favouritesStore, type FavouriteItem } from '$lib/stores/favourites.svelte';
+	import type { DoubanSubject } from '$lib/api/douban';
+	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent } from '$lib/components/ui/card';
@@ -8,10 +9,31 @@
 	import { Play, Trash2, Heart } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 
-	function handlePlay(item: FavouriteItem) {
-		goto(
-			`/player?search=${encodeURIComponent(item.title)}&id=${item.id}&source=${item.source}&title=${encodeURIComponent(item.title)}`
-		);
+	let selectedVideo: DoubanSubject | null = $state(null);
+	let showSourceOverlay = $state(false);
+	let selectedCardRect: DOMRect | null = $state(null);
+
+	function favouriteToSubject(item: FavouriteItem): DoubanSubject {
+		return {
+			id: item.id,
+			title: item.title,
+			cover: item.cover || '',
+			cover_url: item.cover || '',
+			rate: '',
+			score: '',
+			region: [],
+			regions: [],
+			types: item.episode ? [item.episode] : [],
+			director: [],
+			actors: []
+		};
+	}
+
+	function handleVideoClick(item: FavouriteItem, event: MouseEvent) {
+		const target = event.currentTarget as HTMLDivElement;
+		selectedCardRect = target.getBoundingClientRect();
+		selectedVideo = favouriteToSubject(item);
+		showSourceOverlay = true;
 	}
 
 	function handleRemove(item: FavouriteItem) {
@@ -43,7 +65,10 @@
 	{:else}
 		<div class="space-y-3">
 			{#each favouritesStore.items as item (item.id + item.source + item.episode)}
-				<Card class="transition-colors hover:bg-accent/50">
+				<Card
+					class="cursor-pointer transition-colors hover:bg-accent/50"
+					onclick={(e) => handleVideoClick(item, e)}
+				>
 					<CardContent class="p-4">
 						<div class="flex gap-4">
 							{#if item.cover}
@@ -68,7 +93,14 @@
 											{/if}
 										</div>
 									</div>
-									<Button variant="ghost" size="icon" onclick={() => handleRemove(item)}>
+									<Button
+										variant="ghost"
+										size="icon"
+										onclick={(e) => {
+											e.stopPropagation();
+											handleRemove(item);
+										}}
+									>
 										<Heart class="h-4 w-4 fill-primary text-primary" />
 									</Button>
 								</div>
@@ -77,10 +109,6 @@
 									<span class="text-xs text-muted-foreground">
 										添加于 {formatRelativeTime(item.addedAt)}
 									</span>
-									<Button size="sm" onclick={() => handlePlay(item)}>
-										<Play class="mr-1 h-4 w-4" />
-										播放
-									</Button>
 								</div>
 							</div>
 						</div>
@@ -90,3 +118,10 @@
 		</div>
 	{/if}
 </div>
+
+<VideoSourceOverlay
+	item={selectedVideo}
+	originRect={selectedCardRect}
+	bind:open={showSourceOverlay}
+	onOpenChange={(open) => (showSourceOverlay = open)}
+/>

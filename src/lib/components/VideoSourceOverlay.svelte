@@ -42,19 +42,6 @@
 	let selectedDescription = $state('');
 	let overlayDidOpen = $state(false);
 
-	function handlePopState() {
-		if (open && overlayDidOpen) {
-			handleClose();
-		}
-	}
-
-	onMount(() => {
-		window.addEventListener('popstate', handlePopState);
-		return () => {
-			window.removeEventListener('popstate', handlePopState);
-		};
-	});
-
 	async function searchSources(query: string) {
 		loading = true;
 		searchResults = [];

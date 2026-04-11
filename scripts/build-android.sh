@@ -39,8 +39,11 @@ if [ -f "$SDK_MANAGER" ]; then
     $SDK_MANAGER --sdk_root="$ANDROID_SDK" "platforms;android-34" "build-tools;34.0.0" || true
 fi
 
+echo "[Build] Building frontend..."
+bun run build
+
 echo "[Build] Building Android APK..."
-npx tauri android build
+bunx tauri android build --target aarch64
 
 echo "[Build] Signing APK..."
 UNSIGNED_APK="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"

@@ -7,6 +7,7 @@
 	import { Home, Search, History, Heart, Settings } from 'lucide-svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { fly } from 'svelte/transition';
@@ -26,8 +27,10 @@
 		return pathname.startsWith(href);
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		themeStore.init();
+		const appWindow = getCurrentWindow();
+		await appWindow.setFullscreen(true);
 	});
 </script>
 
@@ -41,12 +44,15 @@
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
-						class="flex aspect-square w-12 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
-							{active
-							? 'bg-primary/10 text-primary'
-							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+						class="flex flex-col items-center justify-center gap-1 transition-all
+							{active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}"
 					>
-						<item.icon class="h-7 w-7" />
+						<div
+							class="flex aspect-square w-12 items-center justify-center rounded-lg transition-all
+								{active ? 'bg-primary/10' : ''}"
+						>
+							<item.icon class="h-7 w-7" />
+						</div>
 						{#if active}
 							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
 						{/if}
@@ -61,14 +67,19 @@
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
-						class="group flex aspect-square w-12 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 transition-all
-							{active
-							? 'bg-primary/10 text-primary'
-							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+						class="group flex flex-col items-center justify-center gap-1 transition-all
+							{active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}"
 					>
-						<item.icon
-							class="h-7 w-7 transition-transform duration-200 {active ? 'scale-110' : 'scale-100'}"
-						/>
+						<div
+							class="flex aspect-square w-12 items-center justify-center rounded-lg transition-all
+								{active ? 'bg-primary/10' : ''}"
+						>
+							<item.icon
+								class="h-7 w-7 transition-transform duration-200 {active
+									? 'scale-110'
+									: 'scale-100'}"
+							/>
+						</div>
 						{#if active}
 							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
 						{/if}

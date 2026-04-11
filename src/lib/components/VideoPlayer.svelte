@@ -9,6 +9,7 @@
 		LoaderConfiguration,
 		LoaderCallbacks
 	} from 'hls.js';
+	import { fade } from 'svelte/transition';
 	import PlayerControls from './PlayerControls.svelte';
 	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
 
@@ -22,6 +23,7 @@
 		type?: 'native' | 'hls';
 		autoplay?: boolean;
 		poster?: string;
+		initialPosition?: number;
 		episodes?: Episode[];
 		currentEpisodeIndex?: number;
 		playbackRate?: number;
@@ -42,6 +44,7 @@
 		type = 'native',
 		autoplay = true,
 		poster = '',
+		initialPosition = 0,
 		episodes = [],
 		currentEpisodeIndex = 0,
 		playbackRate = 1,
@@ -82,16 +85,34 @@
 	let lastClickTime = 0;
 	let lastClickTarget: HTMLElement | null = null;
 	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-	let isLongPressing = false;
+	let longPressTriggered = false;
+	let seekActive = $state(false);
+	let seekingTime = $state<number | undefined>(undefined);
+
+	let isUnmounting = $state(false);
 
 	function showControlsTemporarily() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
-		controlsTimeout = setTimeout(() => {
-			if (!videoEl?.paused) {
-				showControls = false;
-			}
-		}, 3000);
+		if (!seekActive) {
+			controlsTimeout = setTimeout(() => {
+				if (!videoEl?.paused && !seekActive) {
+					showControls = false;
+				}
+			}, 3000);
+		}
+	}
+
+	function handleSeekStart() {
+		seekActive = true;
+		seekingTime = localCurrentTime;
+		clearTimeout(controlsTimeout);
+	}
+
+	function handleSeekEnd() {
+		seekActive = false;
+		seekingTime = undefined;
+		showControlsTemporarily();
 	}
 
 	function togglePlay() {
@@ -105,18 +126,30 @@
 	}
 
 	function handleVideoClick(e: MouseEvent) {
-		if (isLongPressing) return;
+		if (longPressTriggered) {
+			longPressTriggered = false;
+			return;
+		}
+
+		if ((e.target as HTMLElement).closest('input, button')) {
+			return;
+		}
+
 		const now = Date.now();
 		if (now - lastClickTime < 300 && lastClickTarget === e.target) {
 			return;
 		}
 		lastClickTime = now;
 		lastClickTarget = e.target as HTMLElement;
-		togglePlay();
+
+		if (showControls) {
+			showControls = false;
+		} else {
+			showControlsTemporarily();
+		}
 	}
 
 	function handleVideoDoubleClick(e: MouseEvent) {
-		if (isLongPressing) return;
 		const rect = containerEl.getBoundingClientRect();
 		const x = e.clientX - rect.left;
 		const isLeftSide = x < rect.width / 2;
@@ -158,11 +191,11 @@
 
 	function startLongPress() {
 		if (longPressTimer) clearTimeout(longPressTimer);
-		isLongPressing = false;
+		longPressTriggered = false;
 		longPressTimer = setTimeout(() => {
-			if (videoEl && localPlaybackRate !== 2) {
+			if (videoEl) {
 				setPlaybackRate(2);
-				isLongPressing = true;
+				longPressTriggered = true;
 				showControlsTemporarily();
 			}
 		}, LONG_PRESS_DURATION);
@@ -173,10 +206,10 @@
 			clearTimeout(longPressTimer);
 			longPressTimer = null;
 		}
-		if (isLongPressing && videoEl) {
+		if (videoEl && localPlaybackRate === 2) {
 			setPlaybackRate(1);
-			isLongPressing = false;
 		}
+		longPressTriggered = false;
 	}
 
 	function handleSeek(e: Event) {
@@ -236,6 +269,8 @@
 
 	let mediaErrorRecoveryCount = 0;
 	const MAX_MEDIA_ERROR_RECOVERIES = 3;
+	let networkErrorRetryCount = 0;
+	const MAX_NETWORK_ERROR_RETRIES = 2;
 
 	class RustLoader implements Loader<LoaderContext> {
 		context: LoaderContext | null = null;
@@ -330,6 +365,7 @@
 	async function initHls() {
 		console.log('[HLS] initHls called:', { type, src });
 		mediaErrorRecoveryCount = 0;
+		networkErrorRetryCount = 0;
 
 		if (type !== 'hls') {
 			console.log('[HLS] type is not hls, skipping');
@@ -347,12 +383,19 @@
 			hls = new Hls({
 				enableWorker: true,
 				lowLatencyMode: false,
-				debug: true,
+				debug: false,
 				preferManagedMediaSource: false,
 				enableSoftwareAES: true,
 				stretchShortVideoTrack: true,
 				defaultAudioCodec: 'mp4a.40.2',
-				loader: RustLoader
+				loader: RustLoader,
+				autoStartLoad: true,
+				startLevel: -1,
+				maxBufferLength: 300,
+				maxMaxBufferLength: 600,
+				maxBufferSize: 2 * 1000 * 1000 * 1000,
+				maxBufferHole: 2.0,
+				backBufferLength: 120
 			});
 
 			hls.on(Hls.Events.ERROR, (_, data) => {
@@ -361,6 +404,14 @@
 					switch (data.type) {
 						case Hls.ErrorTypes.NETWORK_ERROR:
 							console.error('[HLS] Network error');
+							networkErrorRetryCount++;
+							if (networkErrorRetryCount <= MAX_NETWORK_ERROR_RETRIES) {
+								console.warn(
+									`[HLS] Network error, retry attempt ${networkErrorRetryCount}/${MAX_NETWORK_ERROR_RETRIES}`
+								);
+								hls.startLoad();
+								return;
+							}
 							hls.destroy();
 							hls = null;
 							error = '网络连接失败，请检查网络';
@@ -468,6 +519,7 @@
 	});
 
 	onDestroy(() => {
+		isUnmounting = true;
 		clearTimeout(controlsTimeout);
 		if (longPressTimer) clearTimeout(longPressTimer);
 		if (hls) {
@@ -503,6 +555,7 @@
 	}
 
 	function handleError() {
+		if (isUnmounting) return;
 		console.error('[HLS] handleError called, video error:', videoEl?.error);
 		error = '视频播放失败';
 		onError?.('Video playback error');
@@ -510,6 +563,9 @@
 
 	function handleCanPlay() {
 		loading = false;
+		if (initialPosition > 0 && videoEl && videoEl.duration > initialPosition) {
+			videoEl.currentTime = initialPosition;
+		}
 	}
 
 	function closePopup() {
@@ -533,10 +589,18 @@
 />
 
 <div
-	class="relative h-full w-full bg-black"
+	class="relative h-full w-full bg-black select-none"
 	bind:this={containerEl}
 	onmousemove={showControlsTemporarily}
 	ondblclick={handleVideoDoubleClick}
+	onclick={(e) => {
+		if ((e.target as HTMLElement).closest('.player-hud')) return;
+		if (showControls) {
+			showControls = false;
+		} else {
+			showControlsTemporarily();
+		}
+	}}
 	role="button"
 	tabindex="0"
 >
@@ -552,11 +616,31 @@
 		</div>
 	{/if}
 
+	{#if localPlaybackRate === 2}
+		<div
+			class="pointer-events-none absolute inset-0 z-40 flex items-start justify-center pt-16"
+			transition:fade={{ duration: 200 }}
+		>
+			<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 backdrop-blur-sm">
+				<svg
+					class="h-5 w-5 text-yellow-400"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+				</svg>
+				<span class="text-sm font-medium text-white">2x</span>
+			</div>
+		</div>
+	{/if}
+
 	<video
 		bind:this={videoEl}
 		src={type === 'native' ? src : undefined}
 		{poster}
-		class="h-full w-full"
+		class="h-full w-full select-none"
 		playsinline
 		onclick={handleVideoClick}
 		onplay={handlePlay}
@@ -587,6 +671,8 @@
 		{fullscreen}
 		{showControls}
 		{showFullscreenButton}
+		showSettings={showPopup}
+		seekingTime={seekingTime ?? undefined}
 		{onReturn}
 		onTogglePlay={togglePlay}
 		onSeek={(v) => {

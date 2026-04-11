@@ -20,6 +20,8 @@
 		fullscreen: boolean;
 		showControls: boolean;
 		showFullscreenButton: boolean;
+		showSettings?: boolean;
+		seekingTime?: number;
 		onReturn?: () => void;
 		onTogglePlay: () => void;
 		onSeek: (value: number) => void;
@@ -38,6 +40,8 @@
 		fullscreen,
 		showControls,
 		showFullscreenButton,
+		showSettings = false,
+		seekingTime,
 		onReturn,
 		onTogglePlay,
 		onSeek,
@@ -49,9 +53,10 @@
 </script>
 
 <div
-	class="absolute inset-0 z-50 flex flex-col justify-between transition-opacity duration-300 {showControls
+	class="player-hud absolute inset-0 z-50 flex flex-col justify-between transition-opacity duration-300 {showControls
 		? 'opacity-100'
 		: 'pointer-events-none opacity-0'}"
+	style={showSettings ? 'pointer-events: none' : ''}
 	onclick={(e) => e.stopPropagation()}
 >
 	<div class="bg-gradient-to-b from-black/70 to-transparent p-4">
@@ -62,29 +67,47 @@
 			>
 				<ArrowLeft class="h-4 w-4" />
 			</button>
-			<span class="text-sm">{formatDuration(currentTime)} / {formatDuration(duration)}</span>
-			<button
-				class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
-				onclick={onTogglePlay}
-			>
-				{#if playing}
-					<Pause class="h-4 w-4" />
-				{:else}
-					<Play class="h-4 w-4" />
-				{/if}
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
+					onclick={onTogglePlay}
+				>
+					{#if playing}
+						<Pause class="h-4 w-4" />
+					{:else}
+						<Play class="h-4 w-4" />
+					{/if}
+				</button>
+			</div>
 		</div>
 	</div>
 
 	<div class="bg-gradient-to-t from-black/70 to-transparent p-4">
-		<input
-			type="range"
-			min="0"
-			max={duration || 100}
-			value={currentTime}
-			oninput={(e) => onSeek(parseFloat((e.target as HTMLInputElement).value))}
-			class="mb-3 h-1 w-full cursor-pointer appearance-none rounded-lg bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-		/>
+		<div class="mb-3 flex items-center gap-2">
+			<input
+				type="range"
+				min="0"
+				max={duration || 100}
+				value={seekingTime ?? currentTime}
+				oninput={(e) => {
+					seekingTime = parseFloat((e.target as HTMLInputElement).value);
+					onSeek(parseFloat((e.target as HTMLInputElement).value));
+				}}
+				onpointerdown={() => {
+					seekingTime = currentTime;
+				}}
+				onpointerup={() => {
+					seekingTime = undefined;
+				}}
+				onpointercancel={() => {
+					seekingTime = undefined;
+				}}
+				class="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+			/>
+			<span class="min-w-20 text-right text-sm text-white"
+				>{formatDuration(seekingTime ?? currentTime)} / {formatDuration(duration)}</span
+			>
+		</div>
 
 		<div class="flex items-center justify-between text-white">
 			<div class="flex items-center gap-3">

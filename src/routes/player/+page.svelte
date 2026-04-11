@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { historyStore } from '$lib/stores/history.svelte';
 	import { parsePlayUrl, getVideoDetail, type VideoDetail } from '$lib/api/search';
@@ -15,6 +16,7 @@
 
 	let title = $state('');
 	let cover = $state('');
+	let initialPosition = $state(0);
 	let episodes = $state<{ episode: string; url: string }[]>([]);
 	let currentEpisodeIndex = $state(0);
 	let loading = $state(true);
@@ -92,11 +94,13 @@
 		const directUrl = params.get('url');
 		const epIdx = params.get('episodeIndex');
 		const searchQuery = params.get('search');
+		const positionParam = params.get('position');
 
 		title = params.get('title') || '视频播放';
 		cover = params.get('cover') || '';
 
 		if (epIdx) currentEpisodeIndex = parseInt(epIdx, 10);
+		if (positionParam) initialPosition = parseFloat(positionParam);
 
 		if (searchQuery) {
 			overlaySubject = {
@@ -169,19 +173,13 @@
 			}
 		}
 		await loadVideoDetail();
-		try {
-			await invoke('set_immersive_android', { enabled: true });
-		} catch (e) {
-			console.log('[Player] Immersive mode not available:', e);
-		}
+		const appWindow = getCurrentWindow();
+		await appWindow.setFullscreen(true);
 	});
 
 	onDestroy(async () => {
-		try {
-			await invoke('set_immersive_android', { enabled: false });
-		} catch (e) {
-			console.log('[Player] Failed to disable immersive mode:', e);
-		}
+		const appWindow = getCurrentWindow();
+		await appWindow.setFullscreen(false);
 	});
 
 	async function handleEpisodeSelect(episode: { episode: string; url: string }, index: number) {
@@ -300,7 +298,9 @@
 	}
 
 	async function goBack() {
-		toast.error('无法播放，请尝试其他源');
+		if (error && !loading) {
+			toast.error('无法播放，请尝试其他源');
+		}
 		if (window.history.length > 1) {
 			window.history.back();
 		} else {
@@ -326,6 +326,7 @@
 			type={playerType}
 			autoplay={autoplayEnabled}
 			poster={cover}
+			{initialPosition}
 			{episodes}
 			{currentEpisodeIndex}
 			showFullscreenButton={isDesktop}
@@ -337,6 +338,8 @@
 			{availableSources}
 			onSourceChange={handleSourceChange}
 		/>
+	{:else if showSourceOverlay && overlaySubject}
+		<div class="h-full w-full"></div>
 	{:else}
 		<div class="absolute inset-0 flex flex-col items-center justify-center text-white">
 			<p>暂无视频源</p>
