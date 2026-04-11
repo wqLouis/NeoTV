@@ -27,10 +27,33 @@
 		return pathname.startsWith(href);
 	}
 
+	function isMobileDevice(): boolean {
+		if (typeof navigator === 'undefined') return false;
+		const ua = navigator.userAgent;
+		return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+	}
+
+	async function enableFullscreen() {
+		if (!isMobileDevice()) return;
+		try {
+			const appWindow = getCurrentWindow();
+			await appWindow.setFullscreen(true);
+		} catch {}
+	}
+
+	async function enableFullscreenWithRetry(retries = 3) {
+		await enableFullscreen();
+		if (isMobileDevice()) {
+			for (let i = 0; i < retries; i++) {
+				await new Promise((r) => setTimeout(r, 100));
+				await enableFullscreen();
+			}
+		}
+	}
+
 	onMount(async () => {
 		themeStore.init();
-		const appWindow = getCurrentWindow();
-		await appWindow.setFullscreen(true);
+		await enableFullscreenWithRetry();
 	});
 </script>
 
