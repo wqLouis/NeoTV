@@ -29,6 +29,11 @@ jobs:
       - name: Install Bun dependencies
         run: bun install
 
+      - name: Initialize Android project
+        run: |
+          rm -rf src-tauri/gen/android
+          bunx tauri android init --ci
+
       - name: Build frontend
         run: bun run build
 
