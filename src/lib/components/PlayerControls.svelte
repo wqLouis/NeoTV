@@ -12,6 +12,11 @@
 	} from '@lucide/svelte';
 	import { formatDuration } from '$lib/utils/format';
 
+	interface CacheStats {
+		count: number;
+		bytes: number;
+	}
+
 	interface Props {
 		currentTime: number;
 		duration: number;
@@ -23,6 +28,9 @@
 		showFullscreenButton: boolean;
 		showSettings?: boolean;
 		seekingTime?: number;
+		showDebug?: boolean;
+		workerCount?: number;
+		cacheStats?: CacheStats | null;
 		onReturn?: () => void;
 		onTogglePlay: () => void;
 		onSeek: (value: number) => void;
@@ -31,6 +39,9 @@
 		onToggleFullscreen: () => void;
 		onTogglePopup: () => void;
 		onToggleDebug?: () => void;
+		onUpdateCacheStats?: () => void;
+		onSetWorkerCount?: (count: number) => void;
+		onStopPreloader?: () => void;
 	}
 
 	let {
@@ -44,6 +55,9 @@
 		showFullscreenButton,
 		showSettings = false,
 		seekingTime,
+		showDebug = false,
+		workerCount = 6,
+		cacheStats = null,
 		onReturn,
 		onTogglePlay,
 		onSeek,
@@ -51,8 +65,18 @@
 		onVolumeChange,
 		onToggleFullscreen,
 		onTogglePopup,
-		onToggleDebug
+		onToggleDebug,
+		onUpdateCacheStats,
+		onSetWorkerCount,
+		onStopPreloader
 	}: Props = $props();
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+		return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+	}
 </script>
 
 <div
@@ -136,7 +160,59 @@
 			</div>
 
 			<div class="flex items-center gap-2">
-				{#if onToggleDebug}
+				{#if showDebug}
+					<div
+						class="absolute right-4 bottom-16 z-50 w-64 rounded-lg bg-black/90 p-3 text-xs text-white"
+					>
+						<div class="mb-2 flex items-center justify-between">
+							<span class="font-medium">Preloader Debug</span>
+							<button class="text-white/60 hover:text-white" onclick={onToggleDebug}>✕</button>
+						</div>
+
+						<div class="mb-3 space-y-1">
+							<div class="flex justify-between">
+								<span class="text-white/60">Workers:</span>
+								<span>{workerCount}</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-white/60">Cached Segments:</span>
+								<span>{cacheStats?.count ?? 0}</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-white/60">Cache Size:</span>
+								<span>{cacheStats ? formatBytes(cacheStats.bytes) : '0 B'}</span>
+							</div>
+						</div>
+
+						<div class="mb-3 flex gap-1">
+							<button
+								class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+								onclick={onUpdateCacheStats}
+							>
+								Refresh
+							</button>
+							<button
+								class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+								onclick={onStopPreloader}
+							>
+								Stop
+							</button>
+						</div>
+
+						<div class="mb-2 flex flex-wrap gap-1">
+							{#each [4, 6, 8, 12] as count}
+								<button
+									class="rounded px-2 py-1 text-xs {workerCount === count
+										? 'bg-primary text-primary-foreground'
+										: 'bg-white/10 hover:bg-white/20'}"
+									onclick={() => onSetWorkerCount?.(count)}
+								>
+									{count}
+								</button>
+							{/each}
+						</div>
+					</div>
+				{:else if onToggleDebug}
 					<button
 						class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
 						onclick={onToggleDebug}

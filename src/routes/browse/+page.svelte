@@ -203,14 +203,14 @@
 
 	function setupObserver() {
 		observer?.disconnect();
-		if (!loadMoreTrigger) return;
+		if (!loadMoreTrigger || !scrollContainer) return;
 		observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0].isIntersecting && !loading && !loadingMore) {
 					loadCharts(false);
 				}
 			},
-			{ rootMargin: '0px', threshold: 0 }
+			{ root: scrollContainer, rootMargin: '0px', threshold: 0 }
 		);
 		observer.observe(loadMoreTrigger);
 	}
@@ -263,7 +263,7 @@
 
 <div class="flex h-full flex-col">
 	<div
-		class="mb-8 shrink-0 border-b bg-background/90 shadow-[0_12px_12px] shadow-background/20 backdrop-blur-2xl"
+		class="shrink-0 border-b bg-background/90 shadow-[0_12px_12px] shadow-background/70 backdrop-blur-2xl"
 	>
 		<div class="mx-4 mb-4 flex gap-4 pt-4">
 			<button
@@ -322,7 +322,7 @@
 	</div>
 
 	{#if loading}
-		<div class="grid px-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
+		<div class="grid px-8 pt-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each Array(settingsStore.gridDensity === 'compact' ? 30 : settingsStore.gridDensity === 'loose' ? 12 : 20) as _, i (i)}
 				<div class="space-y-2">
 					<Skeleton class="aspect-2/3 w-full rounded-lg" />
@@ -336,12 +336,12 @@
 			<div
 				bind:this={scrollContainer}
 				onscroll={handleScroll}
-				class="relative w-full flex-1 overflow-y-auto"
+				class="relative w-full flex-1 overflow-y-auto py-12"
 			>
-				<div class="relative min-h-full w-full px-8 pt-4">
+				<div class="isolation-isolate relative min-h-full w-full px-8 pt-4">
 					{#each visibleItems as { item, index, top, left, width, height } (item.id)}
 						<div
-							class="absolute overflow-hidden rounded-lg"
+							class="absolute z-0 overflow-hidden rounded-lg"
 							style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
 						>
 							<DoubanCard
@@ -355,7 +355,11 @@
 					{/each}
 				</div>
 
-				<div bind:this={loadMoreTrigger} class="relative py-4 text-center">
+				<div
+					bind:this={loadMoreTrigger}
+					class="absolute right-0 left-0 py-4 text-center"
+					style="top: {totalHeight + 80}px"
+				>
 					{#if loadingMore}
 						<div class="flex justify-center gap-2">
 							<div

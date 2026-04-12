@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex as TokioMutex;
 use tokio::task::JoinSet;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 const DEFAULT_WORKER_COUNT: usize = 6;
 const MAX_CACHE_BYTES: usize = 2 * 1024 * 1024 * 1024;
@@ -142,7 +142,12 @@ impl Preloader {
         }
 
         let mut workers = self.workers.lock().await;
-        while workers.try_join_next().is_some() {}
+        let result = timeout(Duration::from_secs(2), async {
+            while workers.try_join_next().is_some() {}
+        }).await;
+        if result.is_err() {
+            eprintln!("[Preloader] Stop timed out, forcing cleanup");
+        }
         drop(workers);
 
         {

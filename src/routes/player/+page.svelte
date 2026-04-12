@@ -237,6 +237,8 @@
 			unlistenBackButton();
 		}
 		window.removeEventListener('popstate', handleBackNavigation);
+		playerSrc = '';
+		invoke('preloader_stop').catch(() => {});
 	});
 
 	async function handleEpisodeSelect(episode: { episode: string; url: string }, index: number) {

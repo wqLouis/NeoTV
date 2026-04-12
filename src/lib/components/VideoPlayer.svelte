@@ -84,6 +84,9 @@
 	let cacheStats = $state<{ count: number; bytes: number } | null>(null);
 	let workerCount = $state(6);
 
+	let currentInstanceId = $state(0);
+	let nextInstanceId = $state(1);
+
 	function showControlsTemporarily() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
@@ -242,98 +245,123 @@
 		}
 	}
 
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-		return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-	}
+	function createRustLoaderClass(instanceId: number) {
+		return class RustLoader {
+			context: any = null;
+			stats: any = {
+				aborted: false,
+				loaded: 0,
+				retry: 0,
+				total: 0,
+				chunkCount: 0,
+				bwEstimate: 0,
+				loading: { start: 0, end: 0, first: 0 },
+				parsing: { start: 0, end: 0 },
+				buffering: { start: 0, end: 0, first: 0 }
+			};
+			private config: any;
+			private abortController: AbortController | null = null;
+			private loaderInstanceId: number;
 
-	class RustLoader {
-		context: any = null;
-		stats: any = {
-			aborted: false,
-			loaded: 0,
-			retry: 0,
-			total: 0,
-			chunkCount: 0,
-			bwEstimate: 0,
-			loading: { start: 0, end: 0, first: 0 },
-			parsing: { start: 0, end: 0 },
-			buffering: { start: 0, end: 0, first: 0 }
-		};
-		private config: any;
-		private abortController: AbortController | null = null;
-
-		constructor(config: any) {
-			this.config = config;
-		}
-
-		destroy(): void {
-			this.abortController?.abort();
-			this.context = null;
-		}
-
-		abort(): void {
-			this.abortController?.abort();
-			this.stats.aborted = true;
-		}
-
-		load(context: any, config: any, callbacks: any): void {
-			this.context = context;
-			this.stats.loading.start = performance.now();
-			this.stats.aborted = false;
-			this.abortController = new AbortController();
-
-			const ctx = context as any;
-			const type = ctx.type as string;
-			const url = ctx.url as string;
-
-			if (type === 'manifest' || type === 'level' || type === 'audioTrack' || type === 'subtitle') {
-				console.log('[RustLoader] Fetching m3u8:', url);
-				invoke<string>('fetch_hls_m3u8', { url })
-					.then((content) => {
-						this.stats.loading.end = performance.now();
-						this.stats.loaded = content.length;
-						this.stats.total = content.length;
-						callbacks.onSuccess(
-							{ code: 200, data: content, url: url as string },
-							this.stats,
-							context,
-							null
-						);
-					})
-					.catch((e) => {
-						callbacks.onError({ code: 500, text: String(e) }, context, null, this.stats);
-					});
-			} else {
-				console.log('[RustLoader] Fetching segment:', url);
-				invoke<number[]>('fetch_hls_segment', { url })
-					.then((data) => {
-						const buffer = new Uint8Array(data).buffer;
-						this.stats.loading.end = performance.now();
-						this.stats.loaded = data.length;
-						this.stats.total = data.length;
-						callbacks.onSuccess(
-							{ code: 200, data: buffer, url: url as string },
-							this.stats,
-							context,
-							null
-						);
-					})
-					.catch((e) => {
-						callbacks.onError({ code: 500, text: String(e) }, context, null, this.stats);
-					});
+			constructor(config: any) {
+				this.config = config;
+				this.loaderInstanceId = instanceId;
 			}
-		}
 
-		getCacheAge?(): number | null {
-			return null;
-		}
+			destroy(): void {
+				this.abortController?.abort();
+				this.context = null;
+			}
 
-		getResponseHeader?(name: string): string | null {
-			return null;
-		}
+			abort(): void {
+				this.abortController?.abort();
+				this.stats.aborted = true;
+			}
+
+			load(context: any, config: any, callbacks: any): void {
+				if (this.loaderInstanceId !== currentInstanceId) {
+					console.log(
+						'[RustLoader] Discarding stale request, instanceId:',
+						this.loaderInstanceId,
+						'current:',
+						currentInstanceId
+					);
+					return;
+				}
+				this.context = context;
+				this.stats.loading.start = performance.now();
+				this.stats.aborted = false;
+				this.abortController = new AbortController();
+
+				const ctx = context as any;
+				const type = ctx.type as string;
+				const url = ctx.url as string;
+
+				if (
+					type === 'manifest' ||
+					type === 'level' ||
+					type === 'audioTrack' ||
+					type === 'subtitle'
+				) {
+					console.log('[RustLoader] Fetching m3u8:', url);
+					invoke<string>('fetch_hls_m3u8', { url })
+						.then((content) => {
+							if (this.loaderInstanceId !== currentInstanceId) {
+								console.log('[RustLoader] Discarding stale m3u8 response');
+								return;
+							}
+							this.stats.loading.end = performance.now();
+							this.stats.loaded = content.length;
+							this.stats.total = content.length;
+							callbacks.onSuccess(
+								{ code: 200, data: content, url: url as string },
+								this.stats,
+								context,
+								null
+							);
+						})
+						.catch((e) => {
+							if (this.loaderInstanceId !== currentInstanceId) {
+								return;
+							}
+							callbacks.onError({ code: 500, text: String(e) }, context, null, this.stats);
+						});
+				} else {
+					console.log('[RustLoader] Fetching segment:', url);
+					invoke<number[]>('fetch_hls_segment', { url })
+						.then((data) => {
+							if (this.loaderInstanceId !== currentInstanceId) {
+								console.log('[RustLoader] Discarding stale segment response');
+								return;
+							}
+							const buffer = new Uint8Array(data).buffer;
+							this.stats.loading.end = performance.now();
+							this.stats.loaded = data.length;
+							this.stats.total = data.length;
+							callbacks.onSuccess(
+								{ code: 200, data: buffer, url: url as string },
+								this.stats,
+								context,
+								null
+							);
+						})
+						.catch((e) => {
+							if (this.loaderInstanceId !== currentInstanceId) {
+								return;
+							}
+							callbacks.onError({ code: 500, text: String(e) }, context, null, this.stats);
+						});
+				}
+			}
+
+			getCacheAge?(): number | null {
+				return null;
+			}
+
+			getResponseHeader?(name: string): string | null {
+				return null;
+			}
+		};
 	}
 
 	async function initHls() {
@@ -354,6 +382,7 @@
 		if (Hls.isSupported()) {
 			console.log('[HLS] Hls.isSupported() = true, creating custom loader');
 
+			currentInstanceId = nextInstanceId++;
 			hls = new Hls({
 				enableWorker: true,
 				lowLatencyMode: false,
@@ -362,7 +391,7 @@
 				enableSoftwareAES: true,
 				stretchShortVideoTrack: true,
 				defaultAudioCodec: 'mp4a.40.2',
-				loader: RustLoader,
+				loader: createRustLoaderClass(currentInstanceId),
 				autoStartLoad: true,
 				startLevel: -1,
 				maxBufferLength: 300,
@@ -634,6 +663,9 @@
 		{showFullscreenButton}
 		showSettings={showPopup}
 		seekingTime={seekingTime ?? undefined}
+		{showDebug}
+		{workerCount}
+		{cacheStats}
 		{onReturn}
 		onTogglePlay={togglePlay}
 		onSeek={(v) => {
@@ -649,59 +681,8 @@
 		onToggleFullscreen={toggleFullscreen}
 		onTogglePopup={() => (showPopup = !showPopup)}
 		onToggleDebug={() => (showDebug = !showDebug)}
+		onUpdateCacheStats={updateCacheStats}
+		onSetWorkerCount={setWorkerCount}
+		onStopPreloader={stopPreloader}
 	/>
-
-	{#if showDebug}
-		<div class="absolute right-4 bottom-28 z-30 w-64 rounded-lg bg-black/90 p-3 text-xs text-white">
-			<div class="mb-2 flex items-center justify-between">
-				<span class="font-medium">Preloader Debug</span>
-				<button class="text-white/60 hover:text-white" onclick={() => (showDebug = false)}>✕</button
-				>
-			</div>
-
-			<div class="mb-3 space-y-1">
-				<div class="flex justify-between">
-					<span class="text-white/60">Workers:</span>
-					<span>{workerCount}</span>
-				</div>
-				<div class="flex justify-between">
-					<span class="text-white/60">Cached Segments:</span>
-					<span>{cacheStats?.count ?? 0}</span>
-				</div>
-				<div class="flex justify-between">
-					<span class="text-white/60">Cache Size:</span>
-					<span>{cacheStats ? formatBytes(cacheStats.bytes) : '0 B'}</span>
-				</div>
-			</div>
-
-			<div class="mb-3 flex gap-1">
-				<button
-					class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
-					onclick={updateCacheStats}
-				>
-					Refresh
-				</button>
-				<button
-					class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
-					onclick={stopPreloader}
-				>
-					Stop
-				</button>
-			</div>
-
-			<div class="mb-2 text-xs text-white/60">Workers:</div>
-			<div class="mb-2 flex flex-wrap gap-1">
-				{#each [4, 6, 8, 12] as count}
-					<button
-						class="rounded px-2 py-1 text-xs {workerCount === count
-							? 'bg-primary text-primary-foreground'
-							: 'bg-white/10 hover:bg-white/20'}"
-						onclick={() => setWorkerCount(count)}
-					>
-						{count}
-					</button>
-				{/each}
-			</div>
-		</div>
-	{/if}
 </div>

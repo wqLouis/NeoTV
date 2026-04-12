@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, beforeNavigate } from '$app/navigation';
 	import { search, type SearchResult } from '$lib/api/search';
 	import type { DoubanSubject } from '$lib/api/douban';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -12,8 +12,25 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { Play, X, Film, Info, Users, Heart, Zap } from '@lucide/svelte';
-	import { fly, fade } from 'svelte/transition';
+	import { fly, fade, scale } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
+
+	function scaleFly(node: Element, { delay = 0, duration = 300, y = 100, startScale = 0.5 }) {
+		return {
+			delay,
+			duration,
+			easing: cubicOut,
+			css: (t: number) => {
+				const scaleVal = startScale + (1 - startScale) * t;
+				const yOffset = y * (1 - t);
+				return `
+					transform: scale(${scaleVal}) translateY(${yOffset}px);
+					opacity: ${t};
+				`;
+			}
+		};
+	}
 
 	interface Props {
 		item: DoubanSubject | null;
@@ -55,6 +72,13 @@
 			groupedResults = [];
 			loading = false;
 			testingSources = false;
+		}
+	});
+
+	beforeNavigate((navigation) => {
+		if (open) {
+			navigation.cancel();
+			handleClose();
 		}
 	});
 
@@ -187,7 +211,8 @@
 
 		<div
 			class="relative z-10 flex h-screen w-full overflow-hidden bg-card shadow-2xl"
-			transition:fly={{ duration: 300, y: 30, opacity: 0 }}
+			in:scaleFly={{ y: 100, duration: 300, startScale: 0.5 }}
+			out:fly={{ y: 50, duration: 200 }}
 		>
 			{#if item}
 				<div class="flex h-full w-full">
@@ -388,3 +413,16 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	@keyframes overlayIn {
+		from {
+			opacity: 0;
+			transform: scale(0.5) translateY(100%);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+</style>
