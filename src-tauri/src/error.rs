@@ -1,9 +1,20 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpError {
     pub error: String,
     pub details: Option<String>,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(ref details) = self.details {
+            write!(f, "{}: {}", self.error, details)
+        } else {
+            write!(f, "{}", self.error)
+        }
+    }
 }
 
 impl HttpError {

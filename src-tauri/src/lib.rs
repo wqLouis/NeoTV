@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod http;
 mod m3u8;
+mod preloader;
 mod storage;
 
 use std::fs;
@@ -124,6 +125,9 @@ pub fn run() {
             commands::fetch_media_segment,
             commands::fetch_hls_m3u8,
             commands::fetch_hls_segment,
+            commands::preloader_set_workers,
+            commands::preloader_stop,
+            commands::preloader_stats,
             commands::history_get_all,
             commands::history_add,
             commands::history_remove,
@@ -138,10 +142,15 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
             let cache_dir = app_data_dir.join("cache");
             fs::create_dir_all(&cache_dir).ok();
-            cache::init_cache_dir(cache_dir);
+            cache::init_cache_dir(cache_dir.clone());
+
+            tauri::async_runtime::spawn(async move {
+                cache::load_cache_from_disk().await;
+            });
+
             let storage = storage::Storage::new(app_data_dir);
             app.manage(storage);
-            eprintln!("[LibreTV] Tauri setup complete");
+            eprintln!("[LibreTV] Tauri setup complete, cache dir: {:?}", cache_dir);
             Ok(())
         })
         .run(tauri::generate_context!())

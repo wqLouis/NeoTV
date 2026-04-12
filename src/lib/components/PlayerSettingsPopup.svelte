@@ -43,12 +43,12 @@
 
 {#if show}
 	<button
-		class="fixed inset-0 z-50 cursor-default bg-black/50"
+		class="fixed inset-0 z-[60] cursor-default bg-black/50"
 		onclick={onClose}
 		aria-label="Close settings"
 	></button>
 	<div
-		class="fixed top-0 right-0 z-60 h-full w-72 overflow-hidden bg-black/95 backdrop-blur-sm"
+		class="fixed top-0 right-0 z-[60] h-full w-72 overflow-hidden bg-black/95 backdrop-blur-sm"
 		role="dialog"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) onClose();

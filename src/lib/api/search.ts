@@ -25,6 +25,24 @@ export interface VideoDetail {
 	}[];
 }
 
+const pendingSearches = new Map<string, Promise<SearchResult[]>>();
+
+function getSearchKey(
+	query: string,
+	selectedApis: string[],
+	customApis: ApiSite[],
+	yellowFilterEnabled: boolean,
+	commentaryFilterEnabled: boolean
+): string {
+	return JSON.stringify({
+		query,
+		selectedApis,
+		customApis,
+		yellowFilterEnabled,
+		commentaryFilterEnabled
+	});
+}
+
 async function fetchFromApi(
 	url: string,
 	timeout = 8000
@@ -118,34 +136,55 @@ export async function search(
 ): Promise<SearchResult[]> {
 	if (!query.trim() && selectedApis.length === 0) return [];
 
-	const results = await Promise.all(
-		selectedApis.map((apiKey) => {
-			const customApi = apiKey.startsWith('custom_')
-				? customApis[parseInt(apiKey.replace('custom_', ''), 10)]
-				: undefined;
-			return searchSingleSource(query, apiKey, customApi);
-		})
+	const cacheKey = getSearchKey(
+		query,
+		selectedApis,
+		customApis,
+		yellowFilterEnabled,
+		commentaryFilterEnabled
 	);
 
-	let allResults = results.flat();
-
-	if (yellowFilterEnabled) {
-		const { YELLOW_FILTER_BANNED } = await import('./constants');
-		allResults = allResults.filter((item) => {
-			const typeName = item.type_name || '';
-			return !YELLOW_FILTER_BANNED.some((keyword) => typeName.includes(keyword));
-		});
+	if (pendingSearches.has(cacheKey)) {
+		return pendingSearches.get(cacheKey)!;
 	}
 
-	if (commentaryFilterEnabled) {
-		allResults = allResults.filter((item) => {
-			const remarks = item.vod_remarks || '';
-			const typeName = item.type_name || '';
-			return !remarks.includes('解说') && !typeName.includes('解说');
-		});
-	}
+	const searchPromise = (async () => {
+		try {
+			const results = await Promise.all(
+				selectedApis.map((apiKey) => {
+					const customApi = apiKey.startsWith('custom_')
+						? customApis[parseInt(apiKey.replace('custom_', ''), 10)]
+						: undefined;
+					return searchSingleSource(query, apiKey, customApi);
+				})
+			);
 
-	return allResults;
+			let allResults = results.flat();
+
+			if (yellowFilterEnabled) {
+				const { YELLOW_FILTER_BANNED } = await import('./constants');
+				allResults = allResults.filter((item) => {
+					const typeName = item.type_name || '';
+					return !YELLOW_FILTER_BANNED.some((keyword) => typeName.includes(keyword));
+				});
+			}
+
+			if (commentaryFilterEnabled) {
+				allResults = allResults.filter((item) => {
+					const remarks = item.vod_remarks || '';
+					const typeName = item.type_name || '';
+					return !remarks.includes('解说') && !typeName.includes('解说');
+				});
+			}
+
+			return allResults;
+		} finally {
+			pendingSearches.delete(cacheKey);
+		}
+	})();
+
+	pendingSearches.set(cacheKey, searchPromise);
+	return searchPromise;
 }
 
 export async function getVideoDetail(

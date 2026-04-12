@@ -7,8 +7,9 @@
 		Maximize,
 		Minimize,
 		List,
-		ArrowLeft
-	} from 'lucide-svelte';
+		ArrowLeft,
+		Bug
+	} from '@lucide/svelte';
 	import { formatDuration } from '$lib/utils/format';
 
 	interface Props {
@@ -29,6 +30,7 @@
 		onVolumeChange: (value: number) => void;
 		onToggleFullscreen: () => void;
 		onTogglePopup: () => void;
+		onToggleDebug?: () => void;
 	}
 
 	let {
@@ -48,7 +50,8 @@
 		onToggleMute,
 		onVolumeChange,
 		onToggleFullscreen,
-		onTogglePopup
+		onTogglePopup,
+		onToggleDebug
 	}: Props = $props();
 </script>
 
@@ -69,13 +72,13 @@
 			</button>
 			<div class="flex items-center gap-2">
 				<button
-					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
 					onclick={onTogglePlay}
 				>
 					{#if playing}
-						<Pause class="h-4 w-4" />
+						<Pause class="h-6 w-6" />
 					{:else}
-						<Play class="h-4 w-4" />
+						<Play class="h-6 w-6" />
 					{/if}
 				</button>
 			</div>
@@ -133,6 +136,14 @@
 			</div>
 
 			<div class="flex items-center gap-2">
+				{#if onToggleDebug}
+					<button
+						class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
+						onclick={onToggleDebug}
+					>
+						<Bug class="h-4 w-4" />
+					</button>
+				{/if}
 				<button
 					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/60"
 					onclick={onTogglePopup}

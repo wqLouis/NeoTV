@@ -2,22 +2,13 @@
 	import { goto } from '$app/navigation';
 	import type { SearchResult } from '$lib/api/search';
 	import { Badge } from '$lib/components/ui/badge';
-	import { fetchImage } from '$lib/cache';
+	import CachedImage from './CachedImage.svelte';
 
 	interface Props {
 		item: SearchResult;
 	}
 
 	let { item } = $props();
-	let imageSrc = $state('');
-
-	$effect(() => {
-		if (item.vod_pic && item.vod_pic.startsWith('http')) {
-			fetchImage(item.vod_pic).then((src) => {
-				imageSrc = src;
-			});
-		}
-	});
 
 	function handleClick() {
 		const params = new URLSearchParams({
@@ -38,16 +29,10 @@
 >
 	{#if item.vod_pic && item.vod_pic.startsWith('http')}
 		<div class="relative aspect-[2/3] w-full overflow-hidden">
-			<img
-				src={imageSrc || item.vod_pic}
+			<CachedImage
+				src={item.vod_pic}
 				alt={item.vod_name}
 				class="h-full w-full object-cover transition-transform hover:scale-110"
-				loading="lazy"
-				onerror={(e) => {
-					const img = e.currentTarget as HTMLImageElement;
-					img.src = 'https://via.placeholder.com/300x450?text=无封面';
-					img.classList.add('object-contain');
-				}}
 			/>
 		</div>
 	{/if}

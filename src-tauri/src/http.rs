@@ -1,15 +1,22 @@
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, REFERER, USER_AGENT};
+use std::sync::OnceLock;
 use std::time::Duration;
 
-pub fn create_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| format!("Client build error: {}", e))
+static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+pub fn get_client() -> &'static reqwest::Client {
+    HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .pool_max_idle_per_host(10)
+            .tcp_keepalive(Duration::from_secs(60))
+            .tcp_nodelay(true)
+            .build()
+            .unwrap()
+    })
 }
 
 pub async fn fetch_text(url: &str, referer: Option<&str>) -> Result<(String, String), String> {
-    let client = create_client(20)?;
+    let client = get_client();
 
     let referer_url = referer
         .map(String::from)
@@ -42,7 +49,7 @@ pub async fn fetch_text(url: &str, referer: Option<&str>) -> Result<(String, Str
 }
 
 pub async fn fetch_bytes_with_content_type(url: &str, referer: Option<&str>) -> Result<(Vec<u8>, String), String> {
-    let client = create_client(30)?;
+    let client = get_client();
 
     let referer_url = referer
         .map(String::from)

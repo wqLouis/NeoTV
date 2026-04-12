@@ -3,6 +3,7 @@ use crate::cache::{self, SpeedTestResult};
 use crate::config;
 use crate::error::HttpError;
 use crate::m3u8;
+use crate::preloader;
 use crate::storage::{self, HistoryItem, FavouriteItem};
 use std::collections::HashMap;
 
@@ -15,7 +16,7 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
 
     let url = options.url.clone();
 
-    if let Some(cached) = cache::get_cached(&url, CACHE_TTL_SECS) {
+    if let Some(cached) = cache::get_cached(&url, CACHE_TTL_SECS).await {
         let body = match String::from_utf8(cached.data.clone()) {
             Ok(s) => s,
             Err(_) => return api::http_request(options).await,
@@ -38,7 +39,7 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
         && !content_type.starts_with("audio/")
         && response.body.len() < MAX_CACHE_SIZE
     {
-        cache::set_cached(&url, response.body.clone().into_bytes(), content_type.to_string());
+        cache::set_cached(&url, response.body.clone().into_bytes(), content_type.to_string()).await;
     }
 
     Ok(response)
@@ -46,14 +47,14 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
 
 #[tauri::command]
 pub async fn fetch_url(url: String, referer: Option<String>) -> Result<String, String> {
-    if let Some(cached) = cache::get_cached(&url, 3600) {
+    if let Some(cached) = cache::get_cached(&url, 3600).await {
         return Ok(format!("data:{};base64,{}", cached.content_type, base64_encode(&cached.data)));
     }
 
     let referer_str = referer.as_deref();
     let (data, content_type) = cache::fetch_url(&url, referer_str).await?;
 
-    cache::set_cached(&url, data.clone(), content_type.clone());
+    cache::set_cached(&url, data.clone(), content_type.clone()).await;
 
     if content_type.starts_with("image/") {
         Ok(format!("data:{};base64,{}", content_type, base64_encode(&data)))
@@ -154,9 +155,13 @@ pub async fn fetch_media_segment(url: String) -> Result<Vec<u8>, HttpError> {
 
 #[tauri::command]
 pub async fn fetch_hls_m3u8(url: String, ad_filtering: Option<bool>) -> Result<String, String> {
-    m3u8::fetch_m3u8_content(&url, ad_filtering.unwrap_or(true))
+    let content = m3u8::fetch_m3u8_content(&url, ad_filtering.unwrap_or(true))
         .await
-        .map_err(|e| e.error)
+        .map_err(|e| e.error)?;
+
+    preloader::PRELOADER.start(&content, &url).await;
+
+    Ok(content)
 }
 
 #[tauri::command]
@@ -169,19 +174,39 @@ pub async fn fetch_hls_segment(url: String) -> Result<Vec<u8>, String> {
     } else {
         url.clone()
     };
-    m3u8::fetch_media_segment(&actual_url)
+
+    if let Some(data) = preloader::PRELOADER.get_segment(&actual_url).await {
+        return Ok(data);
+    }
+
+    preloader::PRELOADER.get_segment_or_fetch(&actual_url)
         .await
-        .map_err(|e| e.error)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn cache_clear() {
-    cache::clear_all_caches();
+pub async fn preloader_set_workers(count: usize) {
+    preloader::PRELOADER.set_worker_count(count);
 }
 
 #[tauri::command]
-pub fn cache_stats() -> cache::CacheStats {
-    cache::get_cache_stats()
+pub async fn preloader_stop() {
+    preloader::PRELOADER.stop().await;
+}
+
+#[tauri::command]
+pub async fn preloader_stats() -> (usize, usize) {
+    preloader::PRELOADER.get_cache_stats().await
+}
+
+#[tauri::command]
+pub async fn cache_clear() {
+    cache::clear_all_caches().await;
+}
+
+#[tauri::command]
+pub async fn cache_stats() -> cache::CacheStats {
+    cache::get_cache_stats().await
 }
 
 #[tauri::command]

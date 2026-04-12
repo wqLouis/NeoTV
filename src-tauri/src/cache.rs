@@ -1,10 +1,9 @@
 use crate::http;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::fs;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
@@ -19,44 +18,51 @@ pub struct CacheEntry {
     pub cached_at: u64,
 }
 
+impl CacheEntry {}
+
 #[derive(Debug)]
 pub struct LruCache {
-    entries: HashMap<String, CacheEntry>,
-    access_order: VecDeque<String>,
+    entries: BTreeMap<String, Arc<CacheEntry>>,
+    access_order: Vec<String>,
     total_size: usize,
 }
 
 impl LruCache {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
-            access_order: VecDeque::new(),
+            entries: BTreeMap::new(),
+            access_order: Vec::new(),
             total_size: 0,
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Option<&CacheEntry> {
-        if let Some(entry) = self.entries.get(key) {
-            self.access_order.retain(|k| k != key);
-            self.access_order.push_back(key.to_string());
+    pub fn get(&mut self, key: &str) -> Option<Arc<CacheEntry>> {
+        if let Some(entry) = self.entries.get(key).cloned() {
+            if let Some(pos) = self.access_order.iter().position(|k| k == key) {
+                self.access_order.swap_remove(pos);
+                self.access_order.push(key.to_string());
+            }
             Some(entry)
         } else {
             None
         }
     }
 
-    pub fn insert(&mut self, key: String, entry: CacheEntry) {
+    pub fn insert(&mut self, key: String, entry: Arc<CacheEntry>) {
         let entry_size = entry.data.len();
 
         if let Some(old) = self.entries.remove(&key) {
             self.total_size -= old.data.len();
-            self.access_order.retain(|k| k != &key);
+            if let Some(pos) = self.access_order.iter().position(|k| k == &key) {
+                self.access_order.swap_remove(pos);
+            }
         }
 
         while self.entries.len() >= MAX_CACHE_ENTRIES || self.total_size + entry_size > MAX_CACHE_SIZE_BYTES {
-            if let Some(oldest) = self.access_order.pop_front() {
+            if let Some(oldest) = self.access_order.first().cloned() {
                 if let Some(removed) = self.entries.remove(&oldest) {
                     self.total_size -= removed.data.len();
+                    self.access_order.remove(0);
                 }
             } else {
                 break;
@@ -65,7 +71,7 @@ impl LruCache {
 
         self.total_size += entry_size;
         self.entries.insert(key.clone(), entry);
-        self.access_order.push_back(key);
+        self.access_order.push(key);
     }
 
     pub fn clear(&mut self) {
@@ -107,22 +113,24 @@ fn get_cache_dir() -> PathBuf {
     let dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("libretv_cache");
-    if !dir.exists() {
-        let _ = fs::create_dir_all(&dir);
-    }
     dir
+}
+
+fn encode_key(url: &str) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(url.as_bytes())
+}
+
+fn decode_key(encoded: &str) -> Option<String> {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(encoded)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
 }
 
 fn get_cache_path(key: &str) -> PathBuf {
     get_cache_dir().join(format!("cache_{}", key))
-}
-
-fn hash_key(url: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut s = DefaultHasher::new();
-    url.hash(&mut s);
-    format!("{:x}", s.finish())
 }
 
 fn current_timestamp() -> u64 {
@@ -161,29 +169,117 @@ pub struct CacheStats {
     pub disk_size: usize,
 }
 
-pub fn get_cached(url: &str, ttl_secs: u64) -> Option<CacheEntry> {
-    let key = hash_key(url);
+pub async fn load_cache_from_disk() {
+    let cache_dir = get_cache_dir();
+    if !cache_dir.exists() {
+        eprintln!("[Cache] Cache dir does not exist: {:?}", cache_dir);
+        return;
+    }
 
+    let entries = match std::fs::read_dir(&cache_dir) {
+        Ok(iter) => iter,
+        Err(e) => {
+            eprintln!("[Cache] Failed to read cache dir: {}", e);
+            return;
+        }
+    };
+
+    let mut loaded = 0;
+    let mut failed = 0;
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("[Cache] Failed to read dir entry: {}", e);
+                continue;
+            }
+        };
+
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let filename = match path.file_name().and_then(|n| n.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        let encoded_key = match filename.strip_prefix("cache_") {
+            Some(key) => key,
+            None => continue,
+        };
+
+        let url = match decode_key(encoded_key) {
+            Some(decoded) => decoded,
+            None => {
+                eprintln!("[Cache] Failed to decode key: {}", encoded_key);
+                failed += 1;
+                continue;
+            }
+        };
+
+        let data = match tokio::fs::read(&path).await {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("[Cache] Failed to read file {:?}: {}", path, e);
+                failed += 1;
+                continue;
+            }
+        };
+
+        let cache_entry: CacheEntry = match serde_json::from_slice(&data) {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln!("[Cache] Failed to parse cache file {:?}: {}", path, e);
+                failed += 1;
+                continue;
+            }
+        };
+
+        if let Ok(mut cache) = get_mem_cache().lock() {
+            cache.insert(url, Arc::new(cache_entry));
+            loaded += 1;
+        }
+    }
+
+    eprintln!("[Cache] Loaded {} entries from disk, {} failed", loaded, failed);
+}
+
+pub async fn get_cached(url: &str, ttl_secs: u64) -> Option<Arc<CacheEntry>> {
     if let Ok(mut cache) = get_mem_cache().lock() {
-        if let Some(entry) = cache.get(&key) {
-            if !is_expired(entry, ttl_secs) {
+        if let Some(entry) = cache.get(url) {
+            if !is_expired(entry.as_ref(), ttl_secs) {
                 record_hit();
-                return Some(entry.clone());
+                return Some(entry);
             }
         }
     }
 
-    let path = get_cache_path(&key);
+    let encoded_key = encode_key(url);
+    let path = get_cache_path(&encoded_key);
     if path.exists() {
-        if let Ok(data) = fs::read(&path) {
-            if let Ok(entry) = serde_json::from_slice::<CacheEntry>(&data) {
-                if !is_expired(&entry, ttl_secs) {
-                    if let Ok(mut cache) = get_mem_cache().lock() {
-                        cache.insert(key, entry.clone());
+        match tokio::fs::read(&path).await {
+            Ok(data) => {
+                match serde_json::from_slice::<CacheEntry>(&data) {
+                    Ok(entry) => {
+                        if !is_expired(&entry, ttl_secs) {
+                            let entry = Arc::new(entry);
+                            if let Ok(mut cache) = get_mem_cache().lock() {
+                                cache.insert(url.to_string(), entry.clone());
+                            }
+                            record_hit();
+                            return Some(entry);
+                        }
                     }
-                    record_hit();
-                    return Some(entry);
+                    Err(e) => {
+                        eprintln!("[Cache] Failed to parse cache file {:?}: {}", path, e);
+                    }
                 }
+            }
+            Err(e) => {
+                eprintln!("[Cache] Failed to read cache file {:?}: {}", path, e);
             }
         }
     }
@@ -192,39 +288,70 @@ pub fn get_cached(url: &str, ttl_secs: u64) -> Option<CacheEntry> {
     None
 }
 
-pub fn set_cached(url: &str, data: Vec<u8>, content_type: String) {
-    let key = hash_key(url);
+pub async fn set_cached(url: &str, data: Vec<u8>, content_type: String) {
     let entry = CacheEntry {
         data,
         content_type,
         cached_at: current_timestamp(),
     };
 
+    let entry = Arc::new(entry);
+
     if let Ok(mut cache) = get_mem_cache().lock() {
-        cache.insert(key.clone(), entry.clone());
+        cache.insert(url.to_string(), entry.clone());
     }
 
-    if let Ok(json) = serde_json::to_vec(&entry) {
-        let path = get_cache_path(&key);
-        let _ = fs::write(path, json);
+    let encoded_key = encode_key(url);
+    let path = get_cache_path(&encoded_key);
+
+    let cache_dir = get_cache_dir();
+    if !cache_dir.exists() {
+        if let Err(e) = tokio::fs::create_dir_all(&cache_dir).await {
+            eprintln!("[Cache] Failed to create cache dir: {}", e);
+            return;
+        }
+    }
+
+    match serde_json::to_vec(entry.as_ref()) {
+        Ok(json) => {
+            if let Err(e) = tokio::fs::write(&path, &json).await {
+                eprintln!("[Cache] Failed to write cache file {:?}: {}", path, e);
+                return;
+            }
+            eprintln!("[Cache] Wrote cache: {} -> {:?}", url, path);
+        }
+        Err(e) => {
+            eprintln!("[Cache] Failed to serialize cache entry: {}", e);
+        }
     }
 }
 
-pub fn clear_cache() {
+pub async fn clear_cache() {
     if let Ok(mut cache) = get_mem_cache().lock() {
         cache.clear();
     }
 
     let cache_dir = get_cache_dir();
-    if let Ok(entries) = fs::read_dir(&cache_dir) {
-        for entry in entries.flatten() {
-            let _ = fs::remove_file(entry.path());
+    if !cache_dir.exists() {
+        return;
+    }
+
+    match std::fs::read_dir(&cache_dir) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let _ = tokio::fs::remove_file(entry.path()).await;
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[Cache] Failed to read cache dir: {}", e);
         }
     }
     reset_stats();
 }
 
-pub fn get_cache_stats() -> CacheStats {
+pub async fn get_cache_stats() -> CacheStats {
     let hits = CACHE_HITS.load(Ordering::Relaxed);
     let misses = CACHE_MISSES.load(Ordering::Relaxed);
     let total = hits + misses;
@@ -240,12 +367,16 @@ pub fn get_cache_stats() -> CacheStats {
     let mut disk_count = 0;
     let mut disk_size = 0;
 
-    if let Ok(entries) = fs::read_dir(&cache_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_file() {
-                disk_count += 1;
-                if let Ok(meta) = fs::metadata(entry.path()) {
-                    disk_size += meta.len() as usize;
+    if cache_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    if entry.path().is_file() {
+                        disk_count += 1;
+                        if let Ok(meta) = entry.metadata() {
+                            disk_size += meta.len() as usize;
+                        }
+                    }
                 }
             }
         }
@@ -281,15 +412,15 @@ pub struct SpeedTestResult {
 
 #[derive(Debug)]
 pub struct SpeedCache {
-    entries: HashMap<String, SpeedTestCacheEntry>,
-    access_order: VecDeque<String>,
+    entries: BTreeMap<String, SpeedTestCacheEntry>,
+    access_order: Vec<String>,
 }
 
 impl SpeedCache {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
-            access_order: VecDeque::new(),
+            entries: BTreeMap::new(),
+            access_order: Vec::new(),
         }
     }
 
@@ -299,7 +430,7 @@ impl SpeedCache {
         match entry_opt {
             Some(entry) if current_timestamp() - entry.cached_at < 30 * 60 => {
                 self.access_order.retain(|k| k != key);
-                self.access_order.push_back(key.to_string());
+                self.access_order.push(key.to_string());
                 self.entries.get(key).map(|e| e)
             }
             Some(_) => {
@@ -312,13 +443,14 @@ impl SpeedCache {
     }
 
     pub fn insert(&mut self, key: String, result: SpeedTestResult) {
-        if let Some(_old) = self.entries.remove(&key) {
+        if let Some(_) = self.entries.remove(&key) {
             self.access_order.retain(|k| k != &key);
         }
 
         while self.entries.len() >= 100 {
-            if let Some(oldest) = self.access_order.pop_front() {
+            if let Some(oldest) = self.access_order.first().cloned() {
                 self.entries.remove(&oldest);
+                self.access_order.remove(0);
             } else {
                 break;
             }
@@ -329,7 +461,7 @@ impl SpeedCache {
             cached_at: current_timestamp(),
         };
         self.entries.insert(key.clone(), entry);
-        self.access_order.push_back(key);
+        self.access_order.push(key);
     }
 
     pub fn clear(&mut self) {
@@ -371,8 +503,8 @@ pub fn clear_speed_cache() {
     }
 }
 
-pub fn clear_all_caches() {
-    clear_cache();
+pub async fn clear_all_caches() {
+    clear_cache().await;
     clear_speed_cache();
 }
 

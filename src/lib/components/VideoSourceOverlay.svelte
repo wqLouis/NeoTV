@@ -11,8 +11,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, X, Calendar, Film, Info, Users, Heart, Zap } from 'lucide-svelte';
-	import { fly, fade, scale } from 'svelte/transition';
+	import { Play, X, Film, Info, Users, Heart, Zap } from '@lucide/svelte';
+	import { fly, fade } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 
 	interface Props {
@@ -43,6 +43,20 @@
 	let groupedResults = $state<SearchGroup[]>([]);
 	let speedCache = $state<Map<string, SpeedTestResult>>(new Map());
 	let selectedDescription = $state('');
+
+	let isFavorited = $derived(
+		item ? favouritesStore.items.some((f) => f.id === item.id && f.source === 'douban') : false
+	);
+
+	$effect(() => {
+		if (open && item) {
+			searchSources(item.title);
+		} else if (!open) {
+			groupedResults = [];
+			loading = false;
+			testingSources = false;
+		}
+	});
 
 	async function searchSources(query: string) {
 		loading = true;
@@ -149,21 +163,6 @@
 		}
 	}
 
-	$effect(() => {
-		if (item && open) {
-			searchSources(item.title);
-			document.body.style.overflow = 'hidden';
-		} else {
-			document.body.style.overflow = '';
-		}
-	});
-
-	function getTransformOrigin() {
-		if (!originRect) return 'center center';
-		const { top, left, width, height } = originRect;
-		return `${left + width / 2}px ${top + height / 2}px`;
-	}
-
 	function getSourceStatusIcon(scored: ScoredSource): 'fast' | 'slow' | 'pending' {
 		if (scored.speedMs === undefined) return 'pending';
 		return scored.speedMs < 2000 ? 'fast' : 'slow';
@@ -176,11 +175,7 @@
 </script>
 
 {#if open}
-	<div
-		class="fixed inset-0 z-50 overflow-hidden"
-		style="transform-origin: {getTransformOrigin()};"
-		transition:scale={{ duration: 300, start: 0.9, opacity: 0 }}
-	>
+	<div class="fixed inset-0 z-50 overflow-hidden">
 		<div
 			class="absolute inset-0 bg-background/80 backdrop-blur-sm"
 			onclick={handleClose}
@@ -204,13 +199,9 @@
 									variant="ghost"
 									size="icon"
 									onclick={handleToggleFavorite}
-									title={favouritesStore.has(item.id, 'douban') ? '取消收藏' : '添加到收藏'}
+									title={isFavorited ? '取消收藏' : '添加到收藏'}
 								>
-									<Heart
-										class="h-5 w-5 {favouritesStore.has(item.id, 'douban')
-											? 'fill-primary text-primary'
-											: ''}"
-									/>
+									<Heart class="h-5 w-5 {isFavorited ? 'fill-primary text-primary' : ''}" />
 								</Button>
 								<Button variant="ghost" size="icon" onclick={handleClose}>
 									<X class="h-5 w-5" />
@@ -293,7 +284,7 @@
 						<div class="flex-1 overflow-y-auto">
 							{#if loading}
 								<div class="space-y-3 pr-4">
-									{#each Array(5) as _}
+									{#each Array(5) as _, i (i)}
 										<div class="flex items-center gap-3 rounded-lg border p-3">
 											<Skeleton class="h-16 w-12 rounded" />
 											<div class="flex-grow space-y-2">
@@ -332,7 +323,7 @@
 														<p class="truncate font-medium">{group.name}</p>
 														{#if group.year}
 															<span class="flex items-center gap-1 text-xs text-muted-foreground">
-																<Calendar class="h-3 w-3" />
+																<Zap class="h-3 w-3" />
 																{group.year}
 															</span>
 														{/if}

@@ -4,13 +4,11 @@
 	import { page } from '$app/state';
 	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import { onMount } from 'svelte';
-	import { Home, Search, History, Heart, Settings, LayoutGrid } from 'lucide-svelte';
+	import { Home, Search, History, Heart, Settings, LayoutGrid } from '@lucide/svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import { fly } from 'svelte/transition';
-
 	let { children } = $props();
 
 	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
@@ -57,9 +55,10 @@
 						>
 							<item.icon class="h-7 w-7" />
 						</div>
-						{#if active}
-							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
-						{/if}
+						<span
+							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
+							>{item.label}</span
+						>
 					</a>
 				{/each}
 			</div>
@@ -84,9 +83,10 @@
 									: 'scale-100'}"
 							/>
 						</div>
-						{#if active}
-							<span in:fly={{ y: 10, duration: 200 }} class="text-xs">{item.label}</span>
-						{/if}
+						<span
+							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
+							>{item.label}</span
+						>
 					</a>
 				{/each}
 			</div>

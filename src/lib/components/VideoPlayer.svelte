@@ -2,13 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import Hls from 'hls.js';
-	import type {
-		Loader,
-		LoaderContext,
-		LoaderStats,
-		LoaderConfiguration,
-		LoaderCallbacks
-	} from 'hls.js';
 	import { fade } from 'svelte/transition';
 	import PlayerControls from './PlayerControls.svelte';
 	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
@@ -84,10 +77,12 @@
 	const LONG_PRESS_DURATION = 300;
 
 	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-	let longPressTriggered = false;
 	let seekingTime = $state<number | undefined>(undefined);
 
 	let isUnmounting = $state(false);
+	let showDebug = $state(false);
+	let cacheStats = $state<{ count: number; bytes: number } | null>(null);
+	let workerCount = $state(6);
 
 	function showControlsTemporarily() {
 		showControls = true;
@@ -141,11 +136,9 @@
 
 	function startLongPress() {
 		if (longPressTimer) clearTimeout(longPressTimer);
-		longPressTriggered = false;
 		longPressTimer = setTimeout(() => {
 			if (videoEl) {
 				setPlaybackRate(localPlaybackRate * 2);
-				longPressTriggered = true;
 			}
 		}, LONG_PRESS_DURATION);
 	}
@@ -158,7 +151,6 @@
 		if (videoEl && localPlaybackRate > 1) {
 			setPlaybackRate(localPlaybackRate / 2);
 		}
-		longPressTriggered = false;
 	}
 
 	function handleSeek(e: Event) {
@@ -221,9 +213,45 @@
 	let networkErrorRetryCount = 0;
 	const MAX_NETWORK_ERROR_RETRIES = 2;
 
-	class RustLoader implements Loader<LoaderContext> {
-		context: LoaderContext | null = null;
-		stats: LoaderStats = {
+	async function updateCacheStats() {
+		try {
+			const [count, bytes] = await invoke<[number, number]>('preloader_stats');
+			cacheStats = { count, bytes };
+		} catch (e) {
+			console.error('[Debug] Failed to get cache stats:', e);
+		}
+	}
+
+	async function setWorkerCount(count: number) {
+		try {
+			await invoke('preloader_set_workers', { count });
+			workerCount = count;
+			console.log(`[Debug] Worker count set to ${count}`);
+		} catch (e) {
+			console.error('[Debug] Failed to set worker count:', e);
+		}
+	}
+
+	async function stopPreloader() {
+		try {
+			await invoke('preloader_stop');
+			cacheStats = null;
+			console.log('[Debug] Preloader stopped');
+		} catch (e) {
+			console.error('[Debug] Failed to stop preloader:', e);
+		}
+	}
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+		return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+	}
+
+	class RustLoader {
+		context: any = null;
+		stats: any = {
 			aborted: false,
 			loaded: 0,
 			retry: 0,
@@ -251,18 +279,15 @@
 			this.stats.aborted = true;
 		}
 
-		load(
-			context: LoaderContext,
-			config: LoaderConfiguration,
-			callbacks: LoaderCallbacks<LoaderContext>
-		): void {
+		load(context: any, config: any, callbacks: any): void {
 			this.context = context;
 			this.stats.loading.start = performance.now();
 			this.stats.aborted = false;
 			this.abortController = new AbortController();
 
-			const ctx = context as LoaderContext & { type: string };
-			const { type, url } = ctx;
+			const ctx = context as any;
+			const type = ctx.type as string;
+			const url = ctx.url as string;
 
 			if (type === 'manifest' || type === 'level' || type === 'audioTrack' || type === 'subtitle') {
 				console.log('[RustLoader] Fetching m3u8:', url);
@@ -456,13 +481,14 @@
 		}
 	});
 
-	onDestroy(() => {
+	onDestroy(async () => {
 		isUnmounting = true;
 		clearTimeout(controlsTimeout);
 		if (longPressTimer) clearTimeout(longPressTimer);
 		if (hls) {
 			hls.destroy();
 		}
+		await invoke('preloader_stop');
 	});
 
 	function handleTimeUpdate() {
@@ -622,5 +648,60 @@
 		}}
 		onToggleFullscreen={toggleFullscreen}
 		onTogglePopup={() => (showPopup = !showPopup)}
+		onToggleDebug={() => (showDebug = !showDebug)}
 	/>
+
+	{#if showDebug}
+		<div class="absolute right-4 bottom-28 z-30 w-64 rounded-lg bg-black/90 p-3 text-xs text-white">
+			<div class="mb-2 flex items-center justify-between">
+				<span class="font-medium">Preloader Debug</span>
+				<button class="text-white/60 hover:text-white" onclick={() => (showDebug = false)}>✕</button
+				>
+			</div>
+
+			<div class="mb-3 space-y-1">
+				<div class="flex justify-between">
+					<span class="text-white/60">Workers:</span>
+					<span>{workerCount}</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-white/60">Cached Segments:</span>
+					<span>{cacheStats?.count ?? 0}</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-white/60">Cache Size:</span>
+					<span>{cacheStats ? formatBytes(cacheStats.bytes) : '0 B'}</span>
+				</div>
+			</div>
+
+			<div class="mb-3 flex gap-1">
+				<button
+					class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+					onclick={updateCacheStats}
+				>
+					Refresh
+				</button>
+				<button
+					class="flex-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+					onclick={stopPreloader}
+				>
+					Stop
+				</button>
+			</div>
+
+			<div class="mb-2 text-xs text-white/60">Workers:</div>
+			<div class="mb-2 flex flex-wrap gap-1">
+				{#each [4, 6, 8, 12] as count}
+					<button
+						class="rounded px-2 py-1 text-xs {workerCount === count
+							? 'bg-primary text-primary-foreground'
+							: 'bg-white/10 hover:bg-white/20'}"
+						onclick={() => setWorkerCount(count)}
+					>
+						{count}
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
 </div>

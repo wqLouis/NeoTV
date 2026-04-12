@@ -5,13 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, Trash2, Clock } from 'lucide-svelte';
-	import { formatDuration, formatRelativeTime } from '$lib/utils/format';
-
-	function getProgressPercent(item: HistoryItem): number {
-		if (!item.duration) return 0;
-		return Math.min(100, Math.round((item.position / item.duration) * 100));
-	}
+	import { Play, Trash2, Clock } from '@lucide/svelte';
 
 	function handlePlay(item: HistoryItem) {
 		const params = new URLSearchParams({
@@ -20,8 +14,7 @@
 			title: item.title,
 			...(item.cover && { cover: item.cover }),
 			...(item.episode && { episode: item.episode }),
-			...(item.episodeIndex !== undefined && { episodeIndex: item.episodeIndex.toString() }),
-			position: item.position.toString()
+			...(item.episodeIndex !== undefined && { episodeIndex: item.episodeIndex.toString() })
 		});
 		goto(`/player?${params.toString()}`);
 	}
@@ -56,12 +49,12 @@
 			{#each historyStore.items as item (item.id + item.source + item.episode)}
 				<Card class="transition-colors hover:bg-accent/50">
 					<CardContent class="p-4">
-						<div class="flex gap-4">
+						<div class="flex items-center gap-4">
 							{#if item.cover}
 								<CachedImage
 									src={item.cover}
 									alt={item.title}
-									class="h-28 w-20 flex-shrink-0 rounded-md object-cover"
+									class="h-20 w-14 flex-shrink-0 rounded-md object-cover"
 								/>
 							{/if}
 							<div class="min-w-0 flex-grow">
@@ -79,32 +72,15 @@
 											{/if}
 										</div>
 									</div>
-									<Button variant="ghost" size="icon" onclick={() => handleRemove(item)}>
-										<Trash2 class="h-4 w-4" />
-									</Button>
-								</div>
-
-								<div class="mt-3 flex items-center gap-4">
-									<div class="flex-grow">
-										<div class="h-1.5 overflow-hidden rounded-full bg-secondary">
-											<div
-												class="h-full bg-primary transition-all"
-												style="width: {getProgressPercent(item)}%"
-											></div>
-										</div>
-										<div class="mt-1 flex justify-between">
-											<span class="text-xs text-muted-foreground">
-												{formatDuration(item.position)} / {formatDuration(item.duration)}
-											</span>
-											<span class="text-xs text-muted-foreground">
-												{formatRelativeTime(item.timestamp)}
-											</span>
-										</div>
+									<div class="flex items-center gap-2">
+										<Button variant="ghost" size="icon" onclick={() => handleRemove(item)}>
+											<Trash2 class="h-4 w-4" />
+										</Button>
+										<Button size="sm" onclick={() => handlePlay(item)}>
+											<Play class="mr-1 h-4 w-4" />
+											播放
+										</Button>
 									</div>
-									<Button size="sm" onclick={() => handlePlay(item)}>
-										<Play class="mr-1 h-4 w-4" />
-										继续
-									</Button>
 								</div>
 							</div>
 						</div>

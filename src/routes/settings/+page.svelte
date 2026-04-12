@@ -21,7 +21,7 @@
 		getSpeedLevel,
 		type SpeedTestResult
 	} from '$lib/utils/speedTest';
-	import { Gauge, Zap, XCircle, CheckCircle, Loader2 } from 'lucide-svelte';
+	import { Gauge, Zap, XCircle, CheckCircle, Loader2 } from '@lucide/svelte';
 
 	interface BuiltinApiEntry {
 		key: string;

@@ -10,7 +10,7 @@
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { AlertCircle } from 'lucide-svelte';
+	import { AlertCircle } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import type { DoubanSubject } from '$lib/api/douban';
 
@@ -79,15 +79,13 @@
 		episode?: string,
 		episodeIdx?: number
 	) {
-		await historyStore.add({
+		historyStore.add({
 			id,
 			title: videoTitle,
 			source,
 			cover: videoCover,
 			episode,
-			episodeIndex: episodeIdx,
-			position: 0,
-			duration: 0
+			episodeIndex: episodeIdx
 		});
 	}
 
@@ -250,15 +248,13 @@
 		playerType = processed.type;
 
 		const id = $page.url.searchParams.get('id') || '';
-		await historyStore.add({
+		historyStore.add({
 			id,
 			title,
 			source: $page.url.searchParams.get('source') || '',
 			cover,
 			episode: episode.episode,
-			episodeIndex: index,
-			position: 0,
-			duration: 0
+			episodeIndex: index
 		});
 
 		loading = false;
@@ -314,16 +310,7 @@
 		loading = false;
 	}
 
-	function handleTimeUpdate(currentTime: number, dur: number) {
-		const id = $page.url.searchParams.get('id') || '';
-		historyStore.updatePosition(
-			id,
-			$page.url.searchParams.get('source') || '',
-			episodes[currentEpisodeIndex]?.episode,
-			currentTime,
-			dur
-		);
-	}
+	function handleTimeUpdate(currentTime: number, dur: number) {}
 
 	function handleEnded() {
 		if (autoplayEnabled && currentEpisodeIndex < episodes.length - 1) {

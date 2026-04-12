@@ -2,10 +2,10 @@
 	import { searchSubjects, type DoubanSubject } from '$lib/api/douban';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import VideoSourceOverlay from './VideoSourceOverlay.svelte';
-	import DoubanCard from './DoubanCard.svelte';
+	import DoubanCard from '$lib/components/DoubanCard.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ArrowRight } from 'lucide-svelte';
+	import { ArrowRight } from '@lucide/svelte';
 
 	interface Props {
 		title: string;
@@ -56,7 +56,7 @@
 	}
 </script>
 
-<div class="group/section relative">
+<div class="relative flex flex-1 flex-col overflow-hidden">
 	<div class="mb-3 flex items-center justify-between">
 		<h2 class="text-lg font-semibold">{title}</h2>
 		<button
@@ -69,25 +69,25 @@
 	</div>
 
 	{#if loading}
-		<div class="flex gap-4 overflow-hidden">
-			{#each Array(8) as _}
-				<Skeleton class="h-60 w-40 shrink-0 rounded-lg" />
+		<div class="flex gap-4">
+			{#each Array(8) as _, i (i)}
+				<div class="h-64 w-40 shrink-0 rounded-lg bg-muted"></div>
 			{/each}
 		</div>
 	{:else}
-		<div class="relative z-0">
+		<div class="relative">
 			<div
 				bind:this={scrollContainer}
-				class="scrollbar-hide flex gap-4 overflow-x-auto pb-4"
+				class="scrollbar-hide flex gap-4 overflow-x-auto py-2"
 				onscroll={handleScroll}
 			>
 				{#each items as item (item.id)}
-					<DoubanCard {item} onclick={handleCardClick} class="min-w-48" imgClass="!h-60" />
+					<DoubanCard {item} size="default" onclick={handleCardClick} />
 				{/each}
 			</div>
 
 			<div
-				class="pointer-events-none absolute top-0 right-0 z-10 h-full w-20 bg-gradient-to-l from-background to-transparent transition-opacity duration-300 {showGradient
+				class="pointer-events-none absolute top-0 right-0 h-full w-16 bg-gradient-to-l from-background to-transparent transition-opacity duration-300 {showGradient
 					? 'opacity-100'
 					: 'opacity-0'}"
 			></div>
@@ -98,16 +98,6 @@
 <VideoSourceOverlay
 	item={selectedVideo}
 	originRect={cardRect}
-	bind:open={showOverlay}
+	open={showOverlay}
 	onOpenChange={(open) => (showOverlay = open)}
 />
-
-<style>
-	.scrollbar-hide::-webkit-scrollbar {
-		display: none;
-	}
-	.scrollbar-hide {
-		-ms-overflow-style: none;
-		scrollbar-width: none;
-	}
-</style>

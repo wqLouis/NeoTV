@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
-	import { Trash2, Heart } from 'lucide-svelte';
+	import { Trash2, Heart } from '@lucide/svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 
 	let selectedVideo: DoubanSubject | null = $state(null);
@@ -117,6 +117,6 @@
 <VideoSourceOverlay
 	item={selectedVideo}
 	originRect={selectedCardRect}
-	bind:open={showSourceOverlay}
+	open={showSourceOverlay}
 	onOpenChange={(open) => (showSourceOverlay = open)}
 />

@@ -12,7 +12,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
-	import { X, Clock, Trash2 } from 'lucide-svelte';
+	import { X, Clock, Trash2 } from '@lucide/svelte';
 
 	type SearchMode = 'api' | 'douban';
 	type DoubanQuickFilter = 'hot' | 'new' | 'top';
@@ -298,7 +298,7 @@
 		</div>
 	{:else if loading}
 		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
-			{#each Array(20) as _}
+			{#each Array(20) as _, i (i)}
 				<div class="space-y-2">
 					<Skeleton class="aspect-[2/3] w-full rounded-lg" />
 					<Skeleton class="h-4 w-3/4" />
@@ -369,16 +369,6 @@
 <VideoSourceOverlay
 	item={selectedVideo}
 	originRect={selectedCardRect}
-	bind:open={showSourceOverlay}
+	open={showSourceOverlay}
 	onOpenChange={(open) => (showSourceOverlay = open)}
 />
-
-<style>
-	.scrollbar-hide::-webkit-scrollbar {
-		display: none;
-	}
-	.scrollbar-hide {
-		-ms-overflow-style: none;
-		scrollbar-width: none;
-	}
-</style>
