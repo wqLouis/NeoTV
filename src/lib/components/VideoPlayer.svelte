@@ -87,6 +87,11 @@
 	let currentInstanceId = $state(0);
 	let nextInstanceId = $state(1);
 
+	const isLinux =
+		typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
+	let useMpv = $state(false);
+	let mpvPlayerId = $state('');
+
 	function showControlsTemporarily() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
@@ -98,11 +103,18 @@
 	}
 
 	function togglePlay() {
-		if (!videoEl) return;
-		if (videoEl.paused) {
-			videoEl.play();
-		} else {
-			videoEl.pause();
+		if (useMpv) {
+			if (playing) {
+				mpvPause();
+			} else {
+				mpvPlay();
+			}
+		} else if (videoEl) {
+			if (videoEl.paused) {
+				videoEl.play();
+			} else {
+				videoEl.pause();
+			}
 		}
 		showControlsTemporarily();
 	}
@@ -123,9 +135,13 @@
 	}
 
 	function toggleMute() {
-		if (!videoEl) return;
-		videoEl.muted = !videoEl.muted;
-		muted = videoEl.muted;
+		if (useMpv) {
+			const newMuted = !muted;
+			mpvSetVolume(newMuted ? 0 : 1);
+		} else if (videoEl) {
+			videoEl.muted = !videoEl.muted;
+			muted = videoEl.muted;
+		}
 	}
 
 	function toggleFullscreen() {
@@ -159,7 +175,9 @@
 	function handleSeek(e: Event) {
 		const target = e.target as HTMLInputElement;
 		const value = parseFloat(target.value);
-		if (videoEl) {
+		if (useMpv) {
+			mpvSeek(value);
+		} else if (videoEl) {
 			videoEl.currentTime = value;
 			localCurrentTime = value;
 		}
@@ -242,6 +260,76 @@
 			console.log('[Debug] Preloader stopped');
 		} catch (e) {
 			console.error('[Debug] Failed to stop preloader:', e);
+		}
+	}
+
+	async function mpvStart() {
+		if (!isLinux || type !== 'hls') return;
+		try {
+			mpvPlayerId = `mpv_${Date.now()}`;
+			const window_id = await invoke<number>('get_x11_window_id');
+			console.log('[MPV] Invoking mpv_start with:', { id: mpvPlayerId, url: src, window_id });
+			await invoke('mpv_start', { id: mpvPlayerId, url: src, window_id });
+			if (autoplay) {
+				await invoke('mpv_play', { id: mpvPlayerId });
+			}
+			loading = false;
+			playing = autoplay;
+			onReady?.();
+		} catch (e) {
+			console.error('[MPV] Failed to start:', e);
+			error = 'MPV 播放器启动失败: ' + e;
+		}
+	}
+
+	async function mpvStop() {
+		if (!mpvPlayerId) return;
+		try {
+			await invoke('mpv_destroy', { id: mpvPlayerId });
+			mpvPlayerId = '';
+		} catch (e) {
+			console.error('[MPV] Failed to stop:', e);
+		}
+	}
+
+	async function mpvPlay() {
+		if (!mpvPlayerId) return;
+		try {
+			await invoke('mpv_play', { id: mpvPlayerId });
+			playing = true;
+		} catch (e) {
+			console.error('[MPV] Failed to play:', e);
+		}
+	}
+
+	async function mpvPause() {
+		if (!mpvPlayerId) return;
+		try {
+			await invoke('mpv_pause', { id: mpvPlayerId });
+			playing = false;
+		} catch (e) {
+			console.error('[MPV] Failed to pause:', e);
+		}
+	}
+
+	async function mpvSeek(position: number) {
+		if (!mpvPlayerId) return;
+		try {
+			await invoke('mpv_seek', { id: mpvPlayerId, position_secs: position });
+			localCurrentTime = position;
+		} catch (e) {
+			console.error('[MPV] Failed to seek:', e);
+		}
+	}
+
+	async function mpvSetVolume(vol: number) {
+		if (!mpvPlayerId) return;
+		try {
+			await invoke('mpv_set_volume', { id: mpvPlayerId, volume: vol * 100 });
+			volume = vol;
+			muted = vol === 0;
+		} catch (e) {
+			console.error('[MPV] Failed to set volume:', e);
 		}
 	}
 
@@ -494,7 +582,7 @@
 	}
 
 	onMount(() => {
-		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl });
+		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl, isLinux });
 		if (type === 'native' && src) {
 			console.log('[HLS] Using native player');
 			loading = false;
@@ -502,9 +590,13 @@
 				videoEl.play().catch(() => {});
 			}
 			onReady?.();
+		} else if (type === 'hls' && isLinux) {
+			console.log('[HLS] Linux detected, using MPV player');
+			useMpv = true;
+			mpvStart();
 		} else if (type === 'hls') {
 			console.log('[HLS] Calling initHls...');
-			initHls(); // async but don't await - let it run
+			initHls();
 		} else {
 			console.log('[HLS] onMount: no conditions matched, type:', type, 'src:', src);
 		}
@@ -514,10 +606,14 @@
 		isUnmounting = true;
 		clearTimeout(controlsTimeout);
 		if (longPressTimer) clearTimeout(longPressTimer);
-		if (hls) {
+		if (useMpv) {
+			await mpvStop();
+		} else if (hls) {
 			hls.destroy();
 		}
-		await invoke('preloader_stop');
+		if (!isLinux) {
+			await invoke('preloader_stop');
+		}
 	});
 
 	function handleTimeUpdate() {
@@ -580,7 +676,7 @@
 />
 
 <div
-	class="relative h-full w-full bg-black select-none"
+	class="relative h-full w-full select-none {useMpv && playing ? '' : 'bg-black'}"
 	bind:this={containerEl}
 	onmousemove={showControlsTemporarily}
 	ondblclick={handleVideoDoubleClick}
@@ -670,12 +766,20 @@
 		onTogglePlay={togglePlay}
 		onSeek={(v) => {
 			localCurrentTime = v;
-			if (videoEl) videoEl.currentTime = v;
+			if (useMpv) {
+				mpvSeek(v);
+			} else if (videoEl) {
+				videoEl.currentTime = v;
+			}
 		}}
 		onToggleMute={toggleMute}
 		onVolumeChange={(v) => {
 			volume = v;
-			if (videoEl) videoEl.volume = v;
+			if (useMpv) {
+				mpvSetVolume(v);
+			} else if (videoEl) {
+				videoEl.volume = v;
+			}
 			muted = v === 0;
 		}}
 		onToggleFullscreen={toggleFullscreen}

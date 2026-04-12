@@ -45,6 +45,7 @@ src-tauri/target/
 *.apk*
 *.aab
 scripts/release-key.jks
+dist-linux
 
 # cache
 image_cache

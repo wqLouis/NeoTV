@@ -54,6 +54,8 @@ dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",
  "http 1.4.0",
+ "libc",
+ "libmpv2",
  "log",
  "once_cell",
  "reqwest 0.11.27",
@@ -1960,6 +1962,21 @@ dependencies = [
  "cfg-if",
  "winapi",
 ]
+
+[[package]]
+name = "libmpv2"
+version = "5.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88dc8432d3de09ed6e343488d6b208467db6801fb41971a1f726fa2248302fe5"
+dependencies = [
+ "libmpv2-sys",
+]
+
+[[package]]
+name = "libmpv2-sys"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edb32cabe7176b7d270b0dca6ff418b75187ae8d3854423e3d06fbff376841e4"
 
 [[package]]
 name = "libredox"

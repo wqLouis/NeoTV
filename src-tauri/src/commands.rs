@@ -334,3 +334,87 @@ pub fn favourites_has(id: String, source: String, episode: Option<String>, state
 pub fn favourites_clear(state: tauri::State<'_, storage::Storage>) {
     state.favourites_clear();
 }
+
+#[cfg(target_os = "linux")]
+use crate::mpv_player::{MpvManager, MpvPlaybackState};
+#[cfg(target_os = "linux")]
+use once_cell::sync::Lazy;
+#[cfg(target_os = "linux")]
+use std::sync::Arc;
+#[cfg(target_os = "linux")]
+use tokio::sync::Mutex;
+
+#[cfg(target_os = "linux")]
+static MPV_MANAGER: Lazy<Arc<Mutex<MpvManager>>> = 
+    Lazy::new(|| Arc::new(Mutex::new(MpvManager::new())));
+
+#[cfg(target_os = "linux")]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn mpv_start(id: String, url: String, window_id: i64) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.create_player(id, url, window_id as u64).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn mpv_destroy(id: String) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.destroy_player(&id).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn mpv_play(id: String) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.play(&id).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn mpv_pause(id: String) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.pause(&id).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn mpv_seek(id: String, position_secs: f64) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.seek(&id, position_secs).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn mpv_set_volume(id: String, volume: f64) -> Result<(), String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.set_volume(&id, volume).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn mpv_get_state(id: String) -> Result<MpvPlaybackState, String> {
+    let manager = MPV_MANAGER.lock().await;
+    manager.get_state(&id).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn get_x11_window_id() -> Result<u64, String> {
+    use std::process::Command;
+    
+    let output = Command::new("bash")
+        .args(["-c", "xdotool search --onlyvisible --class neotv 2>/dev/null || xdotool search --onlyvisible --name NeoTV 2>/dev/null || xdotool search --onlyvisible . 2>/dev/null | head -1"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    
+    if output.status.success() {
+        let window_id_str = String::from_utf8_lossy(&output.stdout);
+        if let Ok(id) = window_id_str.trim().parse() {
+            if id != 0 {
+                return Ok(id);
+            }
+        }
+    }
+    
+    Err("Failed to find X11 window ID".to_string())
+}

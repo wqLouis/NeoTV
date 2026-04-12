@@ -8,6 +8,9 @@ mod m3u8;
 mod preloader;
 mod storage;
 
+#[cfg(target_os = "linux")]
+mod mpv_player;
+
 use std::fs;
 use tauri::Manager;
 
@@ -136,7 +139,15 @@ pub fn run() {
             commands::favourites_add,
             commands::favourites_remove,
             commands::favourites_has,
-            commands::favourites_clear
+            commands::favourites_clear,
+            #[cfg(target_os = "linux")] commands::mpv_start,
+            #[cfg(target_os = "linux")] commands::mpv_destroy,
+            #[cfg(target_os = "linux")] commands::mpv_play,
+            #[cfg(target_os = "linux")] commands::mpv_pause,
+            #[cfg(target_os = "linux")] commands::mpv_seek,
+            #[cfg(target_os = "linux")] commands::mpv_set_volume,
+            #[cfg(target_os = "linux")] commands::mpv_get_state,
+            #[cfg(target_os = "linux")] commands::get_x11_window_id
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");

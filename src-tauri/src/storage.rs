@@ -11,9 +11,6 @@ pub struct HistoryItem {
     pub cover: Option<String>,
     pub episode: Option<String>,
     pub episode_index: Option<i32>,
-    pub position: i64,
-    pub duration: i64,
-    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

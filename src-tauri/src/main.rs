@@ -2,5 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  app_lib::run();
+    #[cfg(target_os = "linux")]
+    {
+        std::env::set_var("GDK_BACKEND", "x11");
+        std::env::set_var("GTK_BACKEND", "x11");
+        std::env::remove_var("WAYLAND_DISPLAY");
+    }
+    app_lib::run();
 }
