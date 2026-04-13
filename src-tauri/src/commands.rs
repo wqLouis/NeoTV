@@ -4,7 +4,7 @@ use crate::config;
 use crate::error::HttpError;
 use crate::m3u8;
 use crate::preloader;
-use crate::storage::{self, FavouriteItem, HistoryItem, SpeedCacheStorage};
+use crate::storage::{self, HistoryItem, FavouriteItem, SpeedCacheStorage};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -38,9 +38,7 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
 
     let response = api::http_request(options).await?;
 
-    let content_type = response
-        .headers
-        .get("content-type")
+    let content_type = response.headers.get("content-type")
         .map(|h| h.as_str())
         .unwrap_or("");
 
@@ -48,12 +46,7 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
         && !content_type.starts_with("audio/")
         && response.body.len() < MAX_CACHE_SIZE
     {
-        cache::set_cached(
-            &url,
-            response.body.clone().into_bytes(),
-            content_type.to_string(),
-        )
-        .await;
+        cache::set_cached(&url, response.body.clone().into_bytes(), content_type.to_string()).await;
     }
 
     Ok(response)
@@ -62,11 +55,7 @@ pub async fn make_http_request(options: HttpRequestOptions) -> Result<HttpRespon
 #[tauri::command]
 pub async fn fetch_url(url: String, referer: Option<String>) -> Result<String, String> {
     if let Some(cached) = cache::get_cached(&url, 3600).await {
-        return Ok(format!(
-            "data:{};base64,{}",
-            cached.content_type,
-            base64_encode(&cached.data)
-        ));
+        return Ok(format!("data:{};base64,{}", cached.content_type, base64_encode(&cached.data)));
     }
 
     let referer_str = referer.as_deref();
@@ -75,11 +64,7 @@ pub async fn fetch_url(url: String, referer: Option<String>) -> Result<String, S
     cache::set_cached(&url, data.clone(), content_type.clone()).await;
 
     if content_type.starts_with("image/") {
-        Ok(format!(
-            "data:{};base64,{}",
-            content_type,
-            base64_encode(&data)
-        ))
+        Ok(format!("data:{};base64,{}", content_type, base64_encode(&data)))
     } else {
         String::from_utf8(data).map_err(|e| format!("UTF-8 error: {}", e))
     }
@@ -92,8 +77,7 @@ pub async fn search_videos(
     custom_api_url: Option<String>,
 ) -> Result<String, HttpError> {
     let source_info = if source_id == "custom" {
-        let url = custom_api_url
-            .ok_or_else(|| HttpError::new("Custom source selected but no API URL provided"))?;
+        let url = custom_api_url.ok_or_else(|| HttpError::new("Custom source selected but no API URL provided"))?;
         config::ApiSourceInfo {
             api_base_url: url.clone(),
             name: "Custom".to_string(),
@@ -103,8 +87,7 @@ pub async fn search_videos(
             detail_path: None,
         }
     } else {
-        config::get_api_source(&source_id)
-            .ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?
+        config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?
     };
 
     let base_url = source_info.api_base_url.clone();
@@ -112,10 +95,7 @@ pub async fn search_videos(
     let full_url = format!("{}{}{}", base_url, search_path, urlencoding::encode(&query));
 
     let mut headers = HashMap::new();
-    headers.insert(
-        "User-Agent".to_string(),
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string(),
-    );
+    headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string());
     headers.insert("Accept".to_string(), "application/json".to_string());
 
     let resp = api::http_request(HttpRequestOptions {
@@ -124,40 +104,25 @@ pub async fn search_videos(
         headers: Some(headers),
         body: None,
         timeout_secs: Some(20),
-    })
-    .await?;
+    }).await?;
 
     if resp.status >= 200 && resp.status < 300 {
         Ok(resp.body)
     } else {
-        Err(HttpError::with_details(
-            format!("API request failed: {}", resp.status),
-            resp.body,
-        ))
+        Err(HttpError::with_details(format!("API request failed: {}", resp.status), resp.body))
     }
 }
 
 #[tauri::command]
 pub async fn get_video_detail(video_id: String, source_id: String) -> Result<String, HttpError> {
-    let source_info = config::get_api_source(&source_id)
-        .ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?;
+    let source_info = config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?;
 
     let base_url = source_info.api_base_url.clone();
-    let detail_path = source_info
-        .detail_path
-        .unwrap_or_else(|| "/api.php/provide/vod/?ac=videolist&ids=".to_string());
-    let full_url = format!(
-        "{}{}{}",
-        base_url,
-        detail_path.replace("{id}", &video_id),
-        video_id
-    );
+    let detail_path = source_info.detail_path.unwrap_or_else(|| "/api.php/provide/vod/?ac=videolist&ids=".to_string());
+    let full_url = format!("{}{}{}", base_url, detail_path.replace("{id}", &video_id), video_id);
 
     let mut headers = HashMap::new();
-    headers.insert(
-        "User-Agent".to_string(),
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string(),
-    );
+    headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string());
     headers.insert("Accept".to_string(), "application/json".to_string());
 
     let resp = api::http_request(HttpRequestOptions {
@@ -166,24 +131,17 @@ pub async fn get_video_detail(video_id: String, source_id: String) -> Result<Str
         headers: Some(headers),
         body: None,
         timeout_secs: Some(20),
-    })
-    .await?;
+    }).await?;
 
     if resp.status >= 200 && resp.status < 300 {
         Ok(resp.body)
     } else {
-        Err(HttpError::with_details(
-            format!("HTTP {}", resp.status),
-            resp.body,
-        ))
+        Err(HttpError::with_details(format!("HTTP {}", resp.status), resp.body))
     }
 }
 
 #[tauri::command]
-pub async fn fetch_media_url(
-    url: String,
-    ad_filtering: Option<bool>,
-) -> Result<m3u8::MediaInfo, String> {
+pub async fn fetch_media_url(url: String, ad_filtering: Option<bool>) -> Result<m3u8::MediaInfo, String> {
     m3u8::fetch_and_process_m3u8(&url, ad_filtering.unwrap_or(true))
         .await
         .map_err(|HttpError { error, .. }| error)
@@ -228,8 +186,7 @@ pub async fn fetch_hls_segment(url: String) -> Result<Vec<u8>, String> {
         return Ok(data);
     }
 
-    preloader::PRELOADER
-        .get_segment_or_fetch(&actual_url)
+    preloader::PRELOADER.get_segment_or_fetch(&actual_url)
         .await
         .map_err(|e| e.to_string())
 }
@@ -304,9 +261,7 @@ pub async fn test_source_speed(source_id: String, custom_url: Option<String>) ->
         }),
         body: None,
         timeout_secs: Some(10),
-    })
-    .await
-    {
+    }).await {
         Ok(resp) => {
             let elapsed = start.elapsed();
             let body_size_kb = (resp.body.len() as f64) / 1024.0;
@@ -315,11 +270,7 @@ pub async fn test_source_speed(source_id: String, custom_url: Option<String>) ->
                 source_id: source_id.clone(),
                 source_name,
                 latency_ms: elapsed.as_millis() as u64,
-                download_speed_kbps: if elapsed_secs > 0.0 {
-                    body_size_kb / elapsed_secs
-                } else {
-                    0.0
-                },
+                download_speed_kbps: if elapsed_secs > 0.0 { body_size_kb / elapsed_secs } else { 0.0 },
                 status: "success".to_string(),
                 error: None,
                 network_id: "default".to_string(),
@@ -359,12 +310,7 @@ pub fn history_add(item: HistoryItem, state: tauri::State<'_, storage::Storage>)
 }
 
 #[tauri::command]
-pub fn history_remove(
-    id: String,
-    source: String,
-    episode: Option<String>,
-    state: tauri::State<'_, storage::Storage>,
-) {
+pub fn history_remove(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) {
     state.history_remove(&id, &source, episode.as_deref());
 }
 
@@ -385,22 +331,12 @@ pub fn favourites_add(item: FavouriteItem, state: tauri::State<'_, storage::Stor
 }
 
 #[tauri::command]
-pub fn favourites_remove(
-    id: String,
-    source: String,
-    episode: Option<String>,
-    state: tauri::State<'_, storage::Storage>,
-) {
+pub fn favourites_remove(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) {
     state.favourites_remove(&id, &source, episode.as_deref());
 }
 
 #[tauri::command]
-pub fn favourites_has(
-    id: String,
-    source: String,
-    episode: Option<String>,
-    state: tauri::State<'_, storage::Storage>,
-) -> bool {
+pub fn favourites_has(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) -> bool {
     state.favourites_has(&id, &source, episode.as_deref())
 }
 
@@ -451,10 +387,56 @@ pub fn speed_cache_clear_all() {
 
 #[tauri::command]
 pub fn get_network_id() -> String {
+    #[cfg(target_os = "android")]
+    {
+        use std::process::Command;
+
+        if let Ok(output) = Command::new("getprop")
+            .args(["wifi.interface"])
+            .output()
+        {
+            let iface = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !iface.is_empty() {
+                if let Ok(output) = Command::new("getprop")
+                    .args([&format!("net.{}.ssid", iface)])
+                    .output()
+                {
+                    let ssid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !ssid.is_empty() && ssid != "<unknown ssid>" {
+                        return format!("android_{}", ssid);
+                    }
+                }
+            }
+        }
+
+        if let Ok(output) = Command::new("dumpsys")
+            .args(["wifi"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if line.contains("SSID") && !line.contains("null") && !line.contains("<unknown") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if let Some(ssid) = parts.last() {
+                        let ssid = ssid.trim();
+                        if !ssid.is_empty() {
+                            return format!("android_{}", ssid);
+                        }
+                    }
+                }
+            }
+        }
+
+        "android_unknown".to_string()
+    }
+
     #[cfg(target_os = "linux")]
     {
         use std::process::Command;
-        let output = Command::new("iw").args(["dev", "-M", "link"]).output();
+
+        let output = Command::new("iw")
+            .args(["dev", "-M", "link"])
+            .output();
 
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -486,7 +468,7 @@ pub fn get_network_id() -> String {
         "unknown".to_string()
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         "default".to_string()
     }

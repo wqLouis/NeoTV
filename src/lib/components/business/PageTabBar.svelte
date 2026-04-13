@@ -12,26 +12,15 @@
 		options: ToggleOption[];
 		value: string;
 		onchange: (value: string) => void;
-		showRing?: boolean;
-		focusedIndex?: number;
-		focusRegion?: string;
 		secondary?: Snippet;
 	}
 
-	let {
-		options,
-		value,
-		onchange,
-		showRing = false,
-		focusedIndex = 0,
-		focusRegion = '',
-		secondary
-	}: Props = $props();
+	let { options, value, onchange, secondary }: Props = $props();
 </script>
 
 <div class="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-2xl">
 	<div class="px-4 pt-4 pb-3">
-		<ToggleButtonGroup {options} {value} {onchange} {showRing} {focusedIndex} {focusRegion} />
+		<ToggleButtonGroup {options} {value} {onchange} />
 	</div>
 
 	{#if secondary}

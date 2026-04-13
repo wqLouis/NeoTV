@@ -268,14 +268,7 @@
 />
 
 <div class="flex h-full flex-col">
-	<PageTabBar
-		options={typeOptions}
-		value={doubanSwitch}
-		onchange={handleTabChange}
-		showRing={true}
-		focusedIndex={tvNav.state.focusedTabIndex}
-		focusRegion={tvNav.state.focusRegion}
-	>
+	<PageTabBar options={typeOptions} value={doubanSwitch} onchange={handleTabChange}>
 		{#snippet secondary()}
 			<div class="scrollbar-hide flex gap-2 overflow-x-auto">
 				<span class="mr-2 self-center text-sm whitespace-nowrap text-muted-foreground">类型:</span>

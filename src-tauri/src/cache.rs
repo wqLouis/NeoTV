@@ -58,9 +58,7 @@ impl LruCache {
             }
         }
 
-        while self.entries.len() >= MAX_CACHE_ENTRIES
-            || self.total_size + entry_size > MAX_CACHE_SIZE_BYTES
-        {
+        while self.entries.len() >= MAX_CACHE_ENTRIES || self.total_size + entry_size > MAX_CACHE_SIZE_BYTES {
             if let Some(oldest) = self.access_order.first().cloned() {
                 if let Some(removed) = self.entries.remove(&oldest) {
                     self.total_size -= removed.data.len();
@@ -246,10 +244,7 @@ pub async fn load_cache_from_disk() {
         }
     }
 
-    eprintln!(
-        "[Cache] Loaded {} entries from disk, {} failed",
-        loaded, failed
-    );
+    eprintln!("[Cache] Loaded {} entries from disk, {} failed", loaded, failed);
 }
 
 pub async fn get_cached(url: &str, ttl_secs: u64) -> Option<Arc<CacheEntry>> {
@@ -266,21 +261,23 @@ pub async fn get_cached(url: &str, ttl_secs: u64) -> Option<Arc<CacheEntry>> {
     let path = get_cache_path(&encoded_key);
     if path.exists() {
         match tokio::fs::read(&path).await {
-            Ok(data) => match serde_json::from_slice::<CacheEntry>(&data) {
-                Ok(entry) => {
-                    if !is_expired(&entry, ttl_secs) {
-                        let entry = Arc::new(entry);
-                        if let Ok(mut cache) = get_mem_cache().lock() {
-                            cache.insert(url.to_string(), entry.clone());
+            Ok(data) => {
+                match serde_json::from_slice::<CacheEntry>(&data) {
+                    Ok(entry) => {
+                        if !is_expired(&entry, ttl_secs) {
+                            let entry = Arc::new(entry);
+                            if let Ok(mut cache) = get_mem_cache().lock() {
+                                cache.insert(url.to_string(), entry.clone());
+                            }
+                            record_hit();
+                            return Some(entry);
                         }
-                        record_hit();
-                        return Some(entry);
+                    }
+                    Err(e) => {
+                        eprintln!("[Cache] Failed to parse cache file {:?}: {}", path, e);
                     }
                 }
-                Err(e) => {
-                    eprintln!("[Cache] Failed to parse cache file {:?}: {}", path, e);
-                }
-            },
+            }
             Err(e) => {
                 eprintln!("[Cache] Failed to read cache file {:?}: {}", path, e);
             }
@@ -358,11 +355,7 @@ pub async fn get_cache_stats() -> CacheStats {
     let hits = CACHE_HITS.load(Ordering::Relaxed);
     let misses = CACHE_MISSES.load(Ordering::Relaxed);
     let total = hits + misses;
-    let hit_rate = if total > 0 {
-        hits as f64 / total as f64
-    } else {
-        0.0
-    };
+    let hit_rate = if total > 0 { hits as f64 / total as f64 } else { 0.0 };
 
     let (mem_count, mem_size) = if let Ok(cache) = get_mem_cache().lock() {
         (cache.len(), cache.size())
@@ -434,7 +427,7 @@ impl SpeedCache {
 
     pub fn get(&mut self, key: &str) -> Option<&SpeedTestCacheEntry> {
         let entry_opt = self.entries.get(key).cloned();
-
+        
         match entry_opt {
             Some(_entry) => {
                 self.access_order.retain(|k| k != key);

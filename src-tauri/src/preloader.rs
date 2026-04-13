@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 
 const DEFAULT_WORKER_COUNT: usize = 6;
-const MAX_CACHE_BYTES: usize = 512 * 1024 * 1024; // 512 MB
+const MAX_CACHE_BYTES: usize = 2 * 1024 * 1024 * 1024;
 const MAX_RETRIES: usize = 3;
 
 pub static PRELOADER: Lazy<Preloader> = Lazy::new(Preloader::new);
@@ -128,24 +128,11 @@ impl Preloader {
             let total_segments = total_segments_clone.clone();
 
             self.workers.lock().await.spawn(async move {
-                worker_loop(
-                    worker_id,
-                    urls,
-                    cache,
-                    lru,
-                    state,
-                    total_bytes,
-                    next_index,
-                    total_segments,
-                )
-                .await;
+                worker_loop(worker_id, urls, cache, lru, state, total_bytes, next_index, total_segments).await;
             });
         }
 
-        eprintln!(
-            "[Preloader] Started with {} workers, {} segments",
-            worker_count, total
-        );
+        eprintln!("[Preloader] Started with {} workers, {} segments", worker_count, total);
     }
 
     pub async fn stop(&self) {
@@ -157,8 +144,7 @@ impl Preloader {
         let mut workers = self.workers.lock().await;
         let result = timeout(Duration::from_secs(2), async {
             while workers.try_join_next().is_some() {}
-        })
-        .await;
+        }).await;
         if result.is_err() {
             eprintln!("[Preloader] Stop timed out, forcing cleanup");
         }
@@ -298,14 +284,11 @@ async fn worker_loop(
                     let mut lru_guard = lru_queue.lock().await;
                     let mut total_bytes_guard = total_bytes.lock().await;
 
-                    cache_guard.insert(
-                        url.clone(),
-                        CachedSegment {
-                            data,
-                            loaded_at: Instant::now(),
-                            index,
-                        },
-                    );
+                    cache_guard.insert(url.clone(), CachedSegment {
+                        data,
+                        loaded_at: Instant::now(),
+                        index,
+                    });
                     lru_guard.push_back(url.clone());
                     *total_bytes_guard += data_len;
                     break;
@@ -313,16 +296,12 @@ async fn worker_loop(
                 Err(e) => {
                     retries += 1;
                     if retries < MAX_RETRIES {
-                        eprintln!(
-                            "[Preloader] Worker {} retry {}/{} for segment {}: {:?}",
-                            worker_id, retries, MAX_RETRIES, index, e
-                        );
+                        eprintln!("[Preloader] Worker {} retry {}/{} for segment {}: {:?}",
+                            worker_id, retries, MAX_RETRIES, index, e);
                         sleep(Duration::from_millis(100 * retries as u64)).await;
                     } else {
-                        eprintln!(
-                            "[Preloader] Worker {} failed after {} retries for segment {}: {:?}",
-                            worker_id, MAX_RETRIES, index, e
-                        );
+                        eprintln!("[Preloader] Worker {} failed after {} retries for segment {}: {:?}",
+                            worker_id, MAX_RETRIES, index, e);
                         break;
                     }
                 }
@@ -346,11 +325,7 @@ async fn evict_if_needed(
         if let Some(oldest_url) = lru.pop_front() {
             if let Some(old_seg) = cache.lock().await.remove(&oldest_url) {
                 *total -= old_seg.data.len();
-                eprintln!(
-                    "[Preloader] Evicted segment {}, freed {} bytes",
-                    oldest_url,
-                    old_seg.data.len()
-                );
+                eprintln!("[Preloader] Evicted segment {}, freed {} bytes", oldest_url, old_seg.data.len());
             }
         } else {
             break;
