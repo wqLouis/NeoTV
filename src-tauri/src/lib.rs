@@ -3,13 +3,11 @@ mod cache;
 mod commands;
 mod config;
 mod error;
+mod gst_check;
 mod http;
 mod m3u8;
 mod preloader;
 mod storage;
-
-#[cfg(target_os = "linux")]
-mod mpv_player;
 
 use std::fs;
 use tauri::Manager;
@@ -140,14 +138,12 @@ pub fn run() {
             commands::favourites_remove,
             commands::favourites_has,
             commands::favourites_clear,
-            #[cfg(target_os = "linux")] commands::mpv_start,
-            #[cfg(target_os = "linux")] commands::mpv_destroy,
-            #[cfg(target_os = "linux")] commands::mpv_play,
-            #[cfg(target_os = "linux")] commands::mpv_pause,
-            #[cfg(target_os = "linux")] commands::mpv_seek,
-            #[cfg(target_os = "linux")] commands::mpv_set_volume,
-            #[cfg(target_os = "linux")] commands::mpv_get_state,
-            #[cfg(target_os = "linux")] commands::get_x11_window_id
+            commands::speed_cache_load,
+            commands::speed_cache_save,
+            commands::speed_cache_get,
+            commands::speed_cache_clear_all,
+            commands::get_network_id,
+            #[cfg(target_os = "linux")] commands::get_gst_libav_status
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
@@ -159,9 +155,12 @@ pub fn run() {
                 cache::load_cache_from_disk().await;
             });
 
-            let storage = storage::Storage::new(app_data_dir);
+            let storage = storage::Storage::new(app_data_dir.clone());
             app.manage(storage);
+
+            commands::init_speed_cache_storage(app_data_dir.clone());
             eprintln!("[LibreTV] Tauri setup complete, cache dir: {:?}", cache_dir);
+            
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -50,9 +50,11 @@
 	<div
 		class="fixed top-0 right-0 z-[60] h-full w-72 overflow-hidden bg-black/95 backdrop-blur-sm"
 		role="dialog"
+		tabindex="-1"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) onClose();
 		}}
+		onkeydown={(e) => e.key === 'Escape' && onClose()}
 		transition:fly={{ x: 288, duration: 300 }}
 	>
 		<div class="flex h-full flex-col p-4">

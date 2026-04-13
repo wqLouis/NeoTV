@@ -26,12 +26,17 @@
 	let error = $state(false);
 	let cachedSrc = $state('');
 	let currentSrc = $state('');
-	let shouldLoad = $state(!lazy);
+	let shouldLoad = $state(false);
 	let imgElement: HTMLImageElement | null = $state(null);
 	let containerElement: HTMLDivElement | null = $state(null);
 
 	onMount(() => {
-		if (!lazy || !containerElement) return;
+		if (!lazy) {
+			shouldLoad = true;
+			return;
+		}
+
+		if (!containerElement) return;
 
 		const observer = new IntersectionObserver(
 			(entries) => {

@@ -13,15 +13,17 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { toast } from 'svelte-sonner';
+	import { invoke } from '@tauri-apps/api/core';
 	import {
-		testSourceSpeed,
-		testAllSourcesSpeed,
 		formatLatency,
 		formatSpeed,
 		getSpeedLevel,
 		type SpeedTestResult
 	} from '$lib/utils/speedTest';
 	import { Gauge, Zap, XCircle, CheckCircle, Loader2 } from '@lucide/svelte';
+	import PageHeader from '$lib/components/business/PageHeader.svelte';
+	import ApiSelector from '$lib/components/business/ApiSelector.svelte';
+	import ThemeSelector from '$lib/components/business/ThemeSelector.svelte';
 
 	interface BuiltinApiEntry {
 		key: string;
@@ -65,6 +67,15 @@
 			loadCacheStats();
 		} catch {
 			toast.error('清除缓存失败');
+		}
+	}
+
+	async function clearSpeedCache() {
+		try {
+			await invoke('speed_cache_clear_all');
+			toast.success('速度缓存已清除');
+		} catch {
+			toast.error('清除速度缓存失败');
 		}
 	}
 
@@ -114,6 +125,13 @@
 	let speedTestResults = $state<SpeedTestResult[]>([]);
 	let isTestingSpeed = $state(false);
 
+	async function testSingleSource(sourceId: string, customUrl?: string): Promise<SpeedTestResult> {
+		return await invoke<SpeedTestResult>('test_source_speed', {
+			sourceId,
+			customUrl
+		});
+	}
+
 	async function runSpeedTest() {
 		if (isTestingSpeed) return;
 		isTestingSpeed = true;
@@ -131,10 +149,22 @@
 				return;
 			}
 
-			const results = await testAllSourcesSpeed(
-				settingsStore.selectedApis,
-				settingsStore.customApis
-			);
+			const results: SpeedTestResult[] = [];
+			for (const apiKey of allApis) {
+				if (apiKey.startsWith('custom_')) {
+					const idx = parseInt(apiKey.replace('custom_', ''), 10);
+					const customApi = settingsStore.customApis[idx];
+					if (customApi) {
+						const result = await testSingleSource('custom', customApi.api);
+						result.source_name = customApi.name;
+						results.push(result);
+					}
+				} else {
+					const result = await testSingleSource(apiKey);
+					results.push(result);
+				}
+			}
+
 			results.sort((a, b) => {
 				if (a.status === 'success' && b.status !== 'success') return -1;
 				if (b.status === 'success' && a.status !== 'success') return 1;
@@ -158,10 +188,14 @@
 		try {
 			const allBuiltinKeys = builtinApis.map((e) => e.key);
 
-			const results = await testAllSourcesSpeed(allBuiltinKeys, settingsStore.customApis);
+			const results: SpeedTestResult[] = [];
+			for (const apiKey of allBuiltinKeys) {
+				const result = await testSingleSource(apiKey);
+				results.push(result);
+			}
 
 			const successResults = results.filter((r) => r.status === 'success');
-			const failedResults = results.filter((r) => r.status !== 'success');
+			const failedResults = results.filter((r) => r.status !== 'error');
 
 			successResults.sort((a, b) => (a.latency_ms || Infinity) - (b.latency_ms || Infinity));
 
@@ -221,10 +255,9 @@
 	});
 </script>
 
-<div class="container mx-auto px-4 py-6">
-	<div class="mb-6 flex items-center justify-between">
-		<h1 class="text-2xl font-bold">设置</h1>
-		<div class="flex gap-2">
+<div class="container mx-auto h-full px-4 py-6">
+	<PageHeader title="设置">
+		{#snippet actions()}
 			<Button variant="outline" size="sm" onclick={exportConfig}>导出</Button>
 			<Button variant="outline" size="sm" onclick={triggerImport}>导入</Button>
 			<input
@@ -235,88 +268,16 @@
 				onchange={handleImport}
 			/>
 			<Button variant="outline" size="sm" onclick={() => settingsStore.reset()}>重置</Button>
-		</div>
-	</div>
+		{/snippet}
+	</PageHeader>
 
 	<div class="space-y-6">
 		<Card>
 			<CardHeader>
 				<CardTitle>API 源选择</CardTitle>
 			</CardHeader>
-			<CardContent class="space-y-4">
-				<div class="flex items-center justify-between">
-					<p class="text-sm text-muted-foreground">选择要使用的视频源，至少选择一个</p>
-					<div class="flex gap-2">
-						<Button variant="ghost" size="sm" onclick={selectAllApis}>全选</Button>
-						<Button variant="ghost" size="sm" onclick={reverseSelectApis}>反选</Button>
-					</div>
-				</div>
-				<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-					{#each builtinApis as entry (entry.key)}
-						<button
-							class="flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors
-								{isApiSelected(entry.key) ? 'border-primary bg-primary/10' : 'bg-transparent hover:bg-accent'}"
-							onclick={() => toggleApi(entry.key)}
-						>
-							<div
-								class="flex h-4 w-4 shrink-0 items-center justify-center rounded border
-									{isApiSelected(entry.key) ? 'border-primary bg-primary' : 'border-muted-foreground'}"
-							>
-								{#if isApiSelected(entry.key)}
-									<svg class="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
-										<path
-											d="M2 6l3 3 5-5"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										/>
-									</svg>
-								{/if}
-							</div>
-							<span class="truncate text-sm">{entry.name}</span>
-						</button>
-					{/each}
-				</div>
-
-				<Separator />
-
-				<div class="space-y-3">
-					<div class="flex items-center justify-between">
-						<Label>自定义 API 源</Label>
-						<span class="text-xs text-muted-foreground">
-							已添加 {settingsStore.customApis.length} 个
-						</span>
-					</div>
-					<div class="flex gap-2">
-						<Input placeholder="名称" bind:value={newCustomName} class="w-32" />
-						<Input placeholder="API 地址" bind:value={newCustomUrl} class="grow" />
-						<Button onclick={addCustomApi}>添加</Button>
-					</div>
-					{#if settingsStore.customApis.length > 0}
-						<div class="space-y-2">
-							{#each settingsStore.customApis as api, i}
-								<div class="flex items-center gap-2 rounded-md bg-secondary px-3 py-2">
-									<span class="grow text-sm">{api.name}</span>
-									<span class="max-w-50 truncate text-xs text-muted-foreground">{api.api}</span>
-									<Button variant="ghost" size="icon" onclick={() => removeCustomApi(i)}>
-										<svg
-											class="h-4 w-4"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-										>
-											<path
-												d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
-											/>
-										</svg>
-									</Button>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
+			<CardContent>
+				<ApiSelector />
 			</CardContent>
 		</Card>
 
@@ -414,80 +375,8 @@
 			<CardHeader>
 				<CardTitle>外观</CardTitle>
 			</CardHeader>
-			<CardContent class="space-y-4">
-				<div class="flex gap-2">
-					<button
-						class="flex flex-1 flex-col items-center gap-2 rounded-lg border p-4 transition-colors
-							{themeStore.current === 'light' ? 'border-primary bg-primary/10' : 'border-border hover:bg-accent'}"
-						onclick={() => themeStore.setTheme('light')}
-					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-							/>
-						</svg>
-						<span class="text-sm">浅色</span>
-					</button>
-					<button
-						class="flex flex-1 flex-col items-center gap-2 rounded-lg border p-4 transition-colors
-							{themeStore.current === 'dark' ? 'border-primary bg-primary/10' : 'border-border hover:bg-accent'}"
-						onclick={() => themeStore.setTheme('dark')}
-					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-							/>
-						</svg>
-						<span class="text-sm">深色</span>
-					</button>
-					<button
-						class="flex flex-1 flex-col items-center gap-2 rounded-lg border p-4 transition-colors
-							{themeStore.current === 'system'
-							? 'border-primary bg-primary/10'
-							: 'border-border hover:bg-accent'}"
-						onclick={() => themeStore.setTheme('system')}
-					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-							/>
-						</svg>
-						<span class="text-sm">跟随系统</span>
-					</button>
-				</div>
-
-				<Separator />
-
-				<div>
-					<Label class="mb-3 block">每行显示数量</Label>
-					<div class="flex gap-2">
-						{#each ['compact', 'standard', 'loose'] as const as density}
-							<button
-								class="flex flex-1 flex-col items-center gap-1 rounded-lg border p-3 transition-colors
-									{settingsStore.gridDensity === density
-									? 'border-primary bg-primary/10'
-									: 'border-border hover:bg-accent'}"
-								onclick={() => settingsStore.setGridDensity(density)}
-							>
-								<span class="text-sm font-medium">
-									{density === 'compact' ? '紧凑' : density === 'standard' ? '标准' : '宽松'}
-								</span>
-								<span class="text-xs text-muted-foreground">
-									{density === 'compact' ? '8列' : density === 'standard' ? '6列' : '5列'}
-								</span>
-							</button>
-						{/each}
-					</div>
-				</div>
+			<CardContent>
+				<ThemeSelector />
 			</CardContent>
 		</Card>
 
@@ -568,17 +457,6 @@
 						onCheckedChange={(v: boolean) => settingsStore.setAutoplayNextEpisode(v)}
 					/>
 				</div>
-				<Separator />
-				<div class="flex items-center justify-between">
-					<div>
-						<Label>自动整合源</Label>
-						<p class="text-sm text-muted-foreground">后台测试所有源，自动选择可播放的</p>
-					</div>
-					<Switch
-						checked={settingsStore.autoIntegrateSources}
-						onCheckedChange={(v: boolean) => settingsStore.setAutoIntegrateSources(v)}
-					/>
-				</div>
 			</CardContent>
 		</Card>
 
@@ -611,6 +489,14 @@
 						</p>
 					</div>
 					<Button variant="outline" size="sm" onclick={clearCache}>清除缓存</Button>
+				</div>
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>速度缓存</Label>
+						<p class="text-sm text-muted-foreground">按网络环境保存的源测速结果</p>
+					</div>
+					<Button variant="outline" size="sm" onclick={clearSpeedCache}>清除速度缓存</Button>
 				</div>
 			</CardContent>
 		</Card>

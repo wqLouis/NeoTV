@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import Hls from 'hls.js';
-	import { fade } from 'svelte/transition';
 	import PlayerControls from './PlayerControls.svelte';
 	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
 
@@ -74,10 +73,6 @@
 	let localPlaybackRate = $state(1);
 
 	const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-	const LONG_PRESS_DURATION = 300;
-
-	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-	let seekingTime = $state<number | undefined>(undefined);
 
 	let isUnmounting = $state(false);
 	let showDebug = $state(false);
@@ -86,11 +81,6 @@
 
 	let currentInstanceId = $state(0);
 	let nextInstanceId = $state(1);
-
-	const isLinux =
-		typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
-	let useMpv = $state(false);
-	let mpvPlayerId = $state('');
 
 	function showControlsTemporarily() {
 		showControls = true;
@@ -103,13 +93,7 @@
 	}
 
 	function togglePlay() {
-		if (useMpv) {
-			if (playing) {
-				mpvPause();
-			} else {
-				mpvPlay();
-			}
-		} else if (videoEl) {
+		if (videoEl) {
 			if (videoEl.paused) {
 				videoEl.play();
 			} else {
@@ -135,10 +119,7 @@
 	}
 
 	function toggleMute() {
-		if (useMpv) {
-			const newMuted = !muted;
-			mpvSetVolume(newMuted ? 0 : 1);
-		} else if (videoEl) {
+		if (videoEl) {
 			videoEl.muted = !videoEl.muted;
 			muted = videoEl.muted;
 		}
@@ -153,31 +134,10 @@
 		}
 	}
 
-	function startLongPress() {
-		if (longPressTimer) clearTimeout(longPressTimer);
-		longPressTimer = setTimeout(() => {
-			if (videoEl) {
-				setPlaybackRate(localPlaybackRate * 2);
-			}
-		}, LONG_PRESS_DURATION);
-	}
-
-	function endLongPress() {
-		if (longPressTimer) {
-			clearTimeout(longPressTimer);
-			longPressTimer = null;
-		}
-		if (videoEl && localPlaybackRate > 1) {
-			setPlaybackRate(localPlaybackRate / 2);
-		}
-	}
-
 	function handleSeek(e: Event) {
 		const target = e.target as HTMLInputElement;
 		const value = parseFloat(target.value);
-		if (useMpv) {
-			mpvSeek(value);
-		} else if (videoEl) {
+		if (videoEl) {
 			videoEl.currentTime = value;
 			localCurrentTime = value;
 		}
@@ -260,76 +220,6 @@
 			console.log('[Debug] Preloader stopped');
 		} catch (e) {
 			console.error('[Debug] Failed to stop preloader:', e);
-		}
-	}
-
-	async function mpvStart() {
-		if (!isLinux || type !== 'hls') return;
-		try {
-			mpvPlayerId = `mpv_${Date.now()}`;
-			const window_id = await invoke<number>('get_x11_window_id');
-			console.log('[MPV] Invoking mpv_start with:', { id: mpvPlayerId, url: src, window_id });
-			await invoke('mpv_start', { id: mpvPlayerId, url: src, window_id });
-			if (autoplay) {
-				await invoke('mpv_play', { id: mpvPlayerId });
-			}
-			loading = false;
-			playing = autoplay;
-			onReady?.();
-		} catch (e) {
-			console.error('[MPV] Failed to start:', e);
-			error = 'MPV 播放器启动失败: ' + e;
-		}
-	}
-
-	async function mpvStop() {
-		if (!mpvPlayerId) return;
-		try {
-			await invoke('mpv_destroy', { id: mpvPlayerId });
-			mpvPlayerId = '';
-		} catch (e) {
-			console.error('[MPV] Failed to stop:', e);
-		}
-	}
-
-	async function mpvPlay() {
-		if (!mpvPlayerId) return;
-		try {
-			await invoke('mpv_play', { id: mpvPlayerId });
-			playing = true;
-		} catch (e) {
-			console.error('[MPV] Failed to play:', e);
-		}
-	}
-
-	async function mpvPause() {
-		if (!mpvPlayerId) return;
-		try {
-			await invoke('mpv_pause', { id: mpvPlayerId });
-			playing = false;
-		} catch (e) {
-			console.error('[MPV] Failed to pause:', e);
-		}
-	}
-
-	async function mpvSeek(position: number) {
-		if (!mpvPlayerId) return;
-		try {
-			await invoke('mpv_seek', { id: mpvPlayerId, position_secs: position });
-			localCurrentTime = position;
-		} catch (e) {
-			console.error('[MPV] Failed to seek:', e);
-		}
-	}
-
-	async function mpvSetVolume(vol: number) {
-		if (!mpvPlayerId) return;
-		try {
-			await invoke('mpv_set_volume', { id: mpvPlayerId, volume: vol * 100 });
-			volume = vol;
-			muted = vol === 0;
-		} catch (e) {
-			console.error('[MPV] Failed to set volume:', e);
 		}
 	}
 
@@ -582,7 +472,7 @@
 	}
 
 	onMount(() => {
-		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl, isLinux });
+		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl });
 		if (type === 'native' && src) {
 			console.log('[HLS] Using native player');
 			loading = false;
@@ -590,10 +480,6 @@
 				videoEl.play().catch(() => {});
 			}
 			onReady?.();
-		} else if (type === 'hls' && isLinux) {
-			console.log('[HLS] Linux detected, using MPV player');
-			useMpv = true;
-			mpvStart();
 		} else if (type === 'hls') {
 			console.log('[HLS] Calling initHls...');
 			initHls();
@@ -605,15 +491,10 @@
 	onDestroy(async () => {
 		isUnmounting = true;
 		clearTimeout(controlsTimeout);
-		if (longPressTimer) clearTimeout(longPressTimer);
-		if (useMpv) {
-			await mpvStop();
-		} else if (hls) {
+		if (hls) {
 			hls.destroy();
 		}
-		if (!isLinux) {
-			await invoke('preloader_stop');
-		}
+		await invoke('preloader_stop');
 	});
 
 	function handleTimeUpdate() {
@@ -676,7 +557,7 @@
 />
 
 <div
-	class="relative h-full w-full select-none {useMpv && playing ? '' : 'bg-black'}"
+	class="relative h-full w-full bg-black select-none"
 	bind:this={containerEl}
 	onmousemove={showControlsTemporarily}
 	ondblclick={handleVideoDoubleClick}
@@ -686,6 +567,16 @@
 			showControls = false;
 		} else {
 			showControlsTemporarily();
+		}
+	}}
+	onkeydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			if (showControls) {
+				showControls = false;
+			} else {
+				showControlsTemporarily();
+			}
 		}
 	}}
 	role="button"
@@ -703,26 +594,6 @@
 		</div>
 	{/if}
 
-	{#if localPlaybackRate > 1}
-		<div
-			class="pointer-events-none absolute inset-0 z-40 flex items-start justify-center pt-16"
-			transition:fade={{ duration: 200 }}
-		>
-			<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 backdrop-blur-sm">
-				<svg
-					class="h-5 w-5 text-yellow-400"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-				</svg>
-				<span class="text-sm font-medium text-white">{localPlaybackRate}x</span>
-			</div>
-		</div>
-	{/if}
-
 	<video
 		bind:this={videoEl}
 		src={type === 'native' ? src : undefined}
@@ -735,15 +606,6 @@
 		onended={handleEnded}
 		onerror={handleError}
 		oncanplay={handleCanPlay}
-		onmousedown={startLongPress}
-		onmouseup={endLongPress}
-		onmouseleave={endLongPress}
-		ontouchstart={(e) => {
-			e.preventDefault();
-			startLongPress();
-		}}
-		ontouchend={endLongPress}
-		ontouchcancel={endLongPress}
 	>
 		<track kind="captions" />
 	</video>
@@ -758,7 +620,6 @@
 		{showControls}
 		{showFullscreenButton}
 		showSettings={showPopup}
-		seekingTime={seekingTime ?? undefined}
 		{showDebug}
 		{workerCount}
 		{cacheStats}
@@ -766,18 +627,14 @@
 		onTogglePlay={togglePlay}
 		onSeek={(v) => {
 			localCurrentTime = v;
-			if (useMpv) {
-				mpvSeek(v);
-			} else if (videoEl) {
+			if (videoEl) {
 				videoEl.currentTime = v;
 			}
 		}}
 		onToggleMute={toggleMute}
 		onVolumeChange={(v) => {
 			volume = v;
-			if (useMpv) {
-				mpvSetVolume(v);
-			} else if (videoEl) {
+			if (videoEl) {
 				videoEl.volume = v;
 			}
 			muted = v === 0;

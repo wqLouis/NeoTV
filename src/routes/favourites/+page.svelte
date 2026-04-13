@@ -3,15 +3,17 @@
 	import type { DoubanSubject } from '$lib/api/douban';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import CachedImage from '$lib/components/CachedImage.svelte';
 	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
 	import { Trash2, Heart } from '@lucide/svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
+	import PageHeader from '$lib/components/business/PageHeader.svelte';
+	import EmptyState from '$lib/components/business/EmptyState.svelte';
+	import DoubanCard from '$lib/components/DoubanCard.svelte';
 
 	let selectedVideo: DoubanSubject | null = $state(null);
 	let showSourceOverlay = $state(false);
 	let selectedCardRect: DOMRect | null = $state(null);
+	let selectedItem: FavouriteItem | null = $state(null);
 
 	function favouriteToSubject(item: FavouriteItem): DoubanSubject {
 		return {
@@ -29,11 +31,15 @@
 		};
 	}
 
-	function handleVideoClick(item: FavouriteItem, event: MouseEvent) {
-		const target = event.currentTarget as HTMLDivElement;
-		selectedCardRect = target.getBoundingClientRect();
+	function handleVideoClick(item: FavouriteItem, e: MouseEvent) {
+		selectedItem = item;
 		selectedVideo = favouriteToSubject(item);
+		selectedCardRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		showSourceOverlay = true;
+	}
+
+	function handleCardClick(item: FavouriteItem) {
+		return (_subject: DoubanSubject, e: MouseEvent) => handleVideoClick(item, e);
 	}
 
 	function handleRemove(item: FavouriteItem, e: MouseEvent) {
@@ -46,69 +52,49 @@
 	}
 </script>
 
-<div class="container mx-auto px-4 py-6">
-	<div class="mb-6 flex items-center justify-between">
-		<h1 class="text-2xl font-bold">我的收藏</h1>
-		{#if favouritesStore.items.length > 0}
-			<Button variant="outline" size="sm" onclick={handleClearAll}>
-				<Trash2 class="mr-1 h-4 w-4" />
-				清空全部
-			</Button>
-		{/if}
-	</div>
+<div class="container mx-auto h-full px-4 py-6">
+	<PageHeader title="我的收藏">
+		{#snippet actions()}
+			{#if favouritesStore.items.length > 0}
+				<Button variant="outline" size="sm" onclick={handleClearAll}>
+					<Trash2 class="mr-1 h-4 w-4" />
+					清空全部
+				</Button>
+			{/if}
+		{/snippet}
+	</PageHeader>
 
 	{#if favouritesStore.items.length === 0}
-		<div class="py-12 text-center text-muted-foreground">
-			<Heart class="mx-auto mb-4 h-12 w-12 opacity-50" />
-			<p>暂无收藏内容</p>
-			<p class="mt-1 text-sm">在播放器中点击收藏按钮添加内容</p>
-		</div>
+		<EmptyState icon={Heart} message="暂无收藏内容" description="在播放器中点击收藏按钮添加内容" />
 	{:else}
 		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each favouritesStore.items as item (item.id + item.source + item.episode)}
-				<div
-					class="group relative cursor-pointer overflow-hidden rounded-lg bg-card transition-all hover:scale-[1.02] hover:shadow-md"
-					onclick={(e) => handleVideoClick(item, e)}
-					role="button"
-					tabindex="0"
-					onkeydown={(e) => e.key === 'Enter' && handleVideoClick(item, e as unknown as MouseEvent)}
-				>
-					<div class="relative aspect-[2/3] w-full overflow-hidden">
-						{#if item.cover}
-							<CachedImage
-								src={item.cover}
-								alt={item.title}
-								class="h-full w-full object-cover transition-transform group-hover:scale-110"
-							/>
-						{:else}
-							<div class="flex h-full w-full items-center justify-center bg-secondary">
-								<span class="text-muted-foreground">无封面</span>
-							</div>
-						{/if}
+				<DoubanCard item={favouriteToSubject(item)} onclick={handleCardClick(item)}>
+					{#snippet action()}
 						<button
-							class="absolute top-1.5 right-1.5 rounded-full bg-black/50 p-1.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+							class="rounded-full bg-black/50 p-1.5 transition-colors hover:bg-black/70"
 							onclick={(e) => handleRemove(item, e)}
 						>
 							<Heart class="h-4 w-4 fill-primary text-primary" />
 						</button>
-						{#if item.episode}
-							<Badge class="absolute bottom-1.5 left-1.5 bg-black/50 text-xs text-white">
-								{item.episode}
-							</Badge>
-						{/if}
-					</div>
-					<div class="p-2">
-						<h3 class="line-clamp-2 text-xs font-medium" title={item.title}>
-							{item.title}
-						</h3>
-						<div class="mt-1 flex items-center justify-between">
-							<span class="text-xs text-muted-foreground">{item.source}</span>
-							<span class="text-xs text-muted-foreground">
-								{formatRelativeTime(item.addedAt)}
-							</span>
+					{/snippet}
+
+					{#snippet overlay(args)}
+						<div
+							class="absolute right-0 bottom-0 left-0 bg-gradient-to-t from-black/60 to-transparent p-2"
+						>
+							<h3 class="line-clamp-2 text-xs font-medium text-white" title={args.title}>
+								{args.title}
+							</h3>
+							{#if item.episode}
+								<p class="text-xs text-white/70">{item.episode}</p>
+							{/if}
+							<p class="text-xs text-white/50">
+								{item.source} · {formatRelativeTime(item.addedAt)}
+							</p>
 						</div>
-					</div>
-				</div>
+					{/snippet}
+				</DoubanCard>
 			{/each}
 		</div>
 	{/if}

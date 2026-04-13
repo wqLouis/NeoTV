@@ -4,9 +4,8 @@
 fn main() {
     #[cfg(target_os = "linux")]
     {
-        std::env::set_var("GDK_BACKEND", "x11");
-        std::env::set_var("GTK_BACKEND", "x11");
-        std::env::remove_var("WAYLAND_DISPLAY");
+        std::env::set_var("WEBKIT_GST_ENABLE_HLS_SUPPORT", "1");
+        std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
     }
     app_lib::run();
 }

@@ -82,7 +82,7 @@
 				onscroll={handleScroll}
 			>
 				{#each items as item (item.id)}
-					<DoubanCard {item} size="default" onclick={handleCardClick} />
+					<DoubanCard {item} onclick={handleCardClick} />
 				{/each}
 			</div>
 

@@ -13,6 +13,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import { X, Clock, Trash2 } from '@lucide/svelte';
+	import ToggleButtonGroup from '$lib/components/business/ToggleButtonGroup.svelte';
+	import EmptyState from '$lib/components/business/EmptyState.svelte';
 
 	type SearchMode = 'api' | 'douban';
 	type DoubanQuickFilter = 'hot' | 'new' | 'top';
@@ -148,27 +150,17 @@
 	}
 </script>
 
-<div class="container mx-auto px-4 py-4">
+<div class="container mx-auto h-full px-4 py-6">
 	<div class="mb-4">
 		<div class="mb-4 flex gap-2">
-			<button
-				class="flex-1 rounded-lg border py-2 text-sm font-medium transition-colors
-					{searchMode === 'api'
-					? 'border-primary bg-primary/10 text-primary'
-					: 'border-border hover:bg-accent'}"
-				onclick={() => (searchMode = 'api')}
-			>
-				全网搜索
-			</button>
-			<button
-				class="flex-1 rounded-lg border py-2 text-sm font-medium transition-colors
-					{searchMode === 'douban'
-					? 'border-primary bg-primary/10 text-primary'
-					: 'border-border hover:bg-accent'}"
-				onclick={() => (searchMode = 'douban')}
-			>
-				豆瓣筛选
-			</button>
+			<ToggleButtonGroup
+				options={[
+					{ value: 'api', label: '全网搜索' },
+					{ value: 'douban', label: '豆瓣筛选' }
+				]}
+				value={searchMode}
+				onchange={(v) => (searchMode = v as SearchMode)}
+			/>
 		</div>
 
 		{#if searchMode === 'api'}
@@ -293,9 +285,7 @@
 			</div>
 		{/if}
 
-		<div class="py-12 text-center text-muted-foreground">
-			<p>输入关键词搜索视频</p>
-		</div>
+		<EmptyState message="输入关键词搜索视频" />
 	{:else if loading}
 		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each Array(20) as _, i (i)}

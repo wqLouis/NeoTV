@@ -7,6 +7,8 @@
 	import { Home, Search, History, Heart, Settings, LayoutGrid } from '@lucide/svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { modalStore } from '$lib/stores/modal.svelte';
+	import Modal from '$lib/components/Modal.svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	let { children } = $props();
@@ -33,13 +35,15 @@
 
 	onMount(async () => {
 		themeStore.init();
+		modalStore.init();
+		await modalStore.checkGstLibav();
 	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
 <div class="flex h-screen">
-	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card pt-8">
+	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<div class="flex flex-col items-center gap-2 py-2">
 				{#each upperNav as item (item.href)}
@@ -98,10 +102,11 @@
 	</main>
 </div>
 
-<div style="display:none">
+<div class="hidden">
 	{#each locales as locale (locale)}
 		<a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
 	{/each}
 </div>
 
 <Sonner />
+<Modal />

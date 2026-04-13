@@ -7,13 +7,16 @@
 	} from '$lib/api/douban';
 	import { DOUBAN_CHART_GENRE_IDS } from '$lib/api/constants';
 	import { settingsStore, GRID_DENSITY_CLASSES } from '$lib/stores/settings.svelte';
-	import { Film, Tv } from '@lucide/svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { onMount, tick } from 'svelte';
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
+	import TVFocusRing from '$lib/components/TVFocusRing.svelte';
 	import { page } from '$app/state';
-	import { createTvnavigation } from '$lib/utils/tv-navigation.svelte';
+	import { tvNav } from '$lib/utils/tv-navigation.svelte';
+	import PageTabBar from '$lib/components/business/PageTabBar.svelte';
+	import EmptyState from '$lib/components/business/EmptyState.svelte';
+	import { Film, Tv } from '@lucide/svelte';
 
 	const GRID_COLS: Record<string, number> = {
 		compact: 8,
@@ -42,8 +45,6 @@
 
 	const PAGE_SIZE = 20;
 	const TV_TAGS_FALLBACK = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
-
-	const tvNav = createTvnavigation();
 
 	const columns = $derived(GRID_COLS[settingsStore.gridDensity] || 6);
 	const gap = 16;
@@ -249,6 +250,11 @@
 			}
 		);
 	}
+
+	const typeOptions = [
+		{ value: 'movie', label: '电影', icon: Film },
+		{ value: 'tv', label: '电视剧', icon: Tv }
+	];
 </script>
 
 <svelte:window
@@ -262,64 +268,33 @@
 />
 
 <div class="flex h-full flex-col">
-	<div
-		class="shrink-0 border-b bg-background/90 shadow-[0_12px_12px] shadow-background/70 backdrop-blur-2xl"
+	<PageTabBar
+		options={typeOptions}
+		value={doubanSwitch}
+		onchange={handleTabChange}
+		showRing={true}
+		focusedIndex={tvNav.state.focusedTabIndex}
+		focusRegion={tvNav.state.focusRegion}
 	>
-		<div class="mx-4 mb-4 flex gap-4 pt-4">
-			<button
-				class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors
-					{tvNav.state.focusedTabIndex === 0 && tvNav.state.focusRegion === 'tabs'
-					? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-					: ''}
-					{doubanSwitch === 'movie'
-					? 'bg-primary text-primary-foreground'
-					: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
-				onclick={() => handleTabChange('movie')}
-				tabindex={tvNav.state.focusRegion === 'tabs' ? 0 : -1}
-			>
-				<Film class="h-5 w-5" />
-				<span class="font-medium">电影</span>
-			</button>
-
-			<button
-				class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors
-					{tvNav.state.focusedTabIndex === 1 && tvNav.state.focusRegion === 'tabs'
-					? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-					: ''}
-					{doubanSwitch === 'tv'
-					? 'bg-primary text-primary-foreground'
-					: 'text-muted-foreground hover:bg-secondary hover:text-foreground'}"
-				onclick={() => handleTabChange('tv')}
-				tabindex={tvNav.state.focusRegion === 'tabs' ? 0 : -1}
-			>
-				<Tv class="h-5 w-5" />
-				<span class="font-medium">电视剧</span>
-			</button>
-		</div>
-
-		<div class="">
-			<hr class="border-border" />
-		</div>
-
-		<div class="scrollbar-hide m-4 flex gap-2 overflow-x-auto">
-			<span class="mr-2 self-center text-sm whitespace-nowrap text-muted-foreground">类型:</span>
-			{#each currentTags as tag, i}
-				<button
-					class="rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors
-						{tvNav.state.focusedGenreIndex === i && tvNav.state.focusRegion === 'genres'
-						? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-						: ''}
-						{selectedGenre === tag
-						? 'bg-primary text-primary-foreground'
-						: 'bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground'}"
-					onclick={() => handleGenreChange(tag)}
-					tabindex={tvNav.state.focusRegion === 'genres' ? 0 : -1}
-				>
-					{tag}
-				</button>
-			{/each}
-		</div>
-	</div>
+		{#snippet secondary()}
+			<div class="scrollbar-hide flex gap-2 overflow-x-auto">
+				<span class="mr-2 self-center text-sm whitespace-nowrap text-muted-foreground">类型:</span>
+				{#each currentTags as tag, i}
+					<button
+						data-tv-genre={i}
+						class="rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors
+							{selectedGenre === tag
+							? 'bg-primary text-primary-foreground'
+							: 'bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground'}"
+						onclick={() => handleGenreChange(tag)}
+						tabindex={tvNav.state.focusRegion === 'genres' ? 0 : -1}
+					>
+						{tag}
+					</button>
+				{/each}
+			</div>
+		{/snippet}
+	</PageTabBar>
 
 	{#if loading}
 		<div class="grid px-8 pt-8 {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
@@ -348,8 +323,9 @@
 								{item}
 								fluid={true}
 								onclick={handleVideoClick}
-								focused={tvNav.state.focusRegion === 'grid' &&
-									tvNav.state.focusedCardIndex === index}
+								focusedIndex={tvNav.state.focusRegion === 'grid'
+									? tvNav.state.focusedCardIndex
+									: -1}
 							/>
 						</div>
 					{/each}
@@ -357,8 +333,8 @@
 
 				<div
 					bind:this={loadMoreTrigger}
-					class="absolute right-0 left-0 py-4 text-center"
-					style="top: {totalHeight + 80}px"
+					class="absolute right-0 left-0 z-10 py-4 text-center"
+					style="top: {totalHeight + 48}px"
 				>
 					{#if loadingMore}
 						<div class="flex justify-center gap-2">
@@ -372,21 +348,15 @@
 			</div>
 
 			<div
-				class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-background to-transparent"
+				class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-background to-transparent"
 			></div>
-
-			{#if charts.length === 0 && !loading}
-				<div class="py-12 text-center text-muted-foreground">
-					<p>暂无数据</p>
-				</div>
-			{/if}
 		</div>
 	{:else}
-		<div class="py-12 text-center text-muted-foreground">
-			<p>暂无数据</p>
-		</div>
+		<EmptyState message="暂无数据" />
 	{/if}
 </div>
+
+<TVFocusRing />
 
 <VideoSourceOverlay
 	item={selectedVideo}

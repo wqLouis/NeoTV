@@ -105,4 +105,6 @@ export function createTvnavigation() {
 	};
 }
 
+export const tvNav = createTvnavigation();
+
 export type Tvnavigation = ReturnType<typeof createTvnavigation>;

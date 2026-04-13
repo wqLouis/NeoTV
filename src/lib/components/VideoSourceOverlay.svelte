@@ -1,20 +1,46 @@
 <script lang="ts">
 	import { goto, beforeNavigate } from '$app/navigation';
+	import { invoke } from '@tauri-apps/api/core';
 	import { search, type SearchResult } from '$lib/api/search';
 	import type { DoubanSubject } from '$lib/api/douban';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { favouritesStore } from '$lib/stores/favourites.svelte';
-	import { testSourceSpeed, type SpeedTestResult } from '$lib/utils/speedTest';
+	import {
+		getSpeedCache,
+		loadSpeedCacheFromDisk,
+		saveSpeedCacheToDisk,
+		type SpeedTestResult
+	} from '$lib/utils/speedTest';
 	import type { SearchGroup, ScoredSource } from '$lib/utils/ranking';
 	import { groupByNameAndTags, sortGroupsByScore } from '$lib/utils/ranking';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import CachedImage from '$lib/components/CachedImage.svelte';
-	import { Play, X, Film, Info, Users, Heart, Zap } from '@lucide/svelte';
+	import { Play, X, Film, Info, Users, Heart } from '@lucide/svelte';
 	import { fly, fade, scale } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
+
+	let currentNetworkId = $state('default');
+
+	async function getNetworkId(): Promise<string> {
+		try {
+			const networkId = await invoke<string>('get_network_id');
+			return networkId;
+		} catch {
+			return 'default';
+		}
+	}
+
+	async function loadCache() {
+		currentNetworkId = await getNetworkId();
+		await loadSpeedCacheFromDisk(currentNetworkId);
+	}
+
+	async function saveCache() {
+		await saveSpeedCacheToDisk(currentNetworkId);
+	}
 
 	function scaleFly(node: Element, { delay = 0, duration = 300, y = 100, startScale = 0.5 }) {
 		return {
@@ -67,8 +93,10 @@
 
 	$effect(() => {
 		if (open && item) {
+			loadCache();
 			searchSources(item.title);
 		} else if (!open) {
+			saveCache();
 			groupedResults = [];
 			loading = false;
 			testingSources = false;
@@ -112,26 +140,6 @@
 
 			const groups = groupByNameAndTags(results);
 			groupedResults = sortGroupsByScore(groups, speedCache, query, isMovieSearch, searchTags);
-
-			if (results.length > 0) {
-				testingSources = true;
-				const uniqueSources = [...new Map(results.map((r) => [r.source_code, r])).values()];
-				const speedPromises = uniqueSources.map((r) =>
-					testSourceSpeed(r.source_code).then(
-						(result) => [r.source_code, result] as [string, SpeedTestResult]
-					)
-				);
-				const speedResults = await Promise.race([
-					Promise.all(speedPromises),
-					new Promise<[string, SpeedTestResult][]>((resolve) => setTimeout(() => resolve([]), 3000))
-				]);
-
-				speedCache = new Map(speedCache);
-				for (const [sourceId, result] of speedResults) {
-					speedCache.set(sourceId, result);
-				}
-				groupedResults = sortGroupsByScore(groups, speedCache, query, isMovieSearch, searchTags);
-			}
 		} catch (e) {
 			console.error('Search failed:', e);
 		} finally {
@@ -296,13 +304,8 @@
 					<div class="flex w-1/2 flex-col overflow-hidden p-6">
 						<div class="mb-4 flex items-center justify-between">
 							<h3 class="text-lg font-semibold">播放源</h3>
-							<span class="flex items-center gap-2 text-sm text-muted-foreground">
-								{#if testingSources}
-									<Zap class="h-4 w-4 animate-pulse text-primary" />
-									<span>测速中...</span>
-								{:else}
-									<span>{groupedResults.length} 个结果</span>
-								{/if}
+							<span class="text-sm text-muted-foreground">
+								{groupedResults.length} 个结果
 							</span>
 						</div>
 
@@ -347,8 +350,7 @@
 													<div class="flex items-center gap-2">
 														<p class="truncate font-medium">{group.name}</p>
 														{#if group.year}
-															<span class="flex items-center gap-1 text-xs text-muted-foreground">
-																<Zap class="h-3 w-3" />
+															<span class="text-xs text-muted-foreground">
 																{group.year}
 															</span>
 														{/if}

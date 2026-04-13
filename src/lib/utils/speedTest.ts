@@ -1,4 +1,3 @@
-import { API_SITES } from '$lib/api/constants';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface SpeedTestResult {
@@ -8,6 +7,7 @@ export interface SpeedTestResult {
 	download_speed_kbps: number;
 	status: string;
 	error?: string;
+	network_id: string;
 }
 
 interface CachedSpeed {
@@ -18,67 +18,36 @@ interface CachedSpeed {
 const SPEED_CACHE_TTL_MS = 30 * 60 * 1000;
 const speedCache = new Map<string, CachedSpeed>();
 
-export async function testSourceSpeed(
-	sourceId: string,
-	customUrl?: string
-): Promise<SpeedTestResult> {
-	const cacheKey = customUrl ? `custom_${customUrl}` : sourceId;
-	const now = Date.now();
-
-	if (speedCache.has(cacheKey)) {
-		const cached = speedCache.get(cacheKey)!;
-		if (now - cached.timestamp < SPEED_CACHE_TTL_MS) {
-			return cached.result;
-		}
-	}
-
+export async function loadSpeedCacheFromDisk(networkId: string): Promise<void> {
 	try {
-		const result = await invoke<SpeedTestResult>('test_source_speed', {
-			sourceId,
-			customUrl: customUrl || null
-		});
-		speedCache.set(cacheKey, { result, timestamp: now });
-		return result;
-	} catch (e) {
-		return {
-			source_id: sourceId,
-			source_name: getSourceName(sourceId),
-			latency_ms: 0,
-			download_speed_kbps: 0,
-			status: 'error',
-			error: String(e)
-		};
-	}
-}
-
-export async function testAllSourcesSpeed(
-	selectedApis: string[],
-	customApis: { api: string; name: string }[]
-): Promise<SpeedTestResult[]> {
-	const results: SpeedTestResult[] = [];
-
-	for (const apiKey of selectedApis) {
-		if (apiKey.startsWith('custom_')) {
-			const idx = parseInt(apiKey.replace('custom_', ''), 10);
-			const customApi = customApis[idx];
-			if (customApi) {
-				const result = await testSourceSpeed('custom', customApi.api);
-				result.source_name = customApi.name;
-				results.push(result);
-			}
-		} else {
-			const result = await testSourceSpeed(apiKey);
-			results.push(result);
+		const results = await invoke<SpeedTestResult[]>('speed_cache_load', { networkId });
+		const now = Date.now();
+		for (const result of results) {
+			speedCache.set(result.source_id, { result, timestamp: now });
 		}
+	} catch (e) {
+		console.error('[SpeedTest] Failed to load speed cache from disk:', e);
 	}
-
-	return results;
 }
 
-function getSourceName(sourceId: string): string {
-	if (sourceId === 'custom') return '自定义源';
-	const site = API_SITES[sourceId];
-	return site?.name || '未知源';
+export async function saveSpeedCacheToDisk(networkId: string): Promise<void> {
+	try {
+		await invoke('speed_cache_save', { networkId });
+	} catch (e) {
+		console.error('[SpeedTest] Failed to save speed cache to disk:', e);
+	}
+}
+
+export function getSpeedCache(sourceId: string): SpeedTestResult | null {
+	const cached = speedCache.get(sourceId);
+	if (cached) {
+		return cached.result;
+	}
+	return null;
+}
+
+export function getAllSpeedCache(): SpeedTestResult[] {
+	return Array.from(speedCache.values()).map((c) => c.result);
 }
 
 export function formatLatency(ms: number): string {

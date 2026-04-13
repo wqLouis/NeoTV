@@ -85,6 +85,8 @@
 		: 'pointer-events-none opacity-0'}"
 	style={showSettings ? 'pointer-events: none' : ''}
 	onclick={(e) => e.stopPropagation()}
+	onkeydown={(e) => e.key === 'Escape' && e.stopPropagation()}
+	role="presentation"
 >
 	<div class="bg-gradient-to-b from-black/70 to-transparent p-4">
 		<div class="flex items-center justify-between text-white">

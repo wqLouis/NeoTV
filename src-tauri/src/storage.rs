@@ -3,6 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use crate::cache::SpeedTestResult;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryItem {
     pub id: String,
@@ -42,7 +44,12 @@ pub struct Storage {
 
 impl Storage {
     pub fn new(data_dir: PathBuf) -> Self {
-        fs::create_dir_all(&data_dir).ok();
+        if let Err(e) = fs::create_dir_all(&data_dir) {
+            eprintln!(
+                "[Storage] Failed to create data directory {:?}: {}",
+                data_dir, e
+            );
+        }
 
         let storage = Self {
             history: Mutex::new(HistoryData::default()),
@@ -52,6 +59,8 @@ impl Storage {
 
         storage.load_history();
         storage.load_favourites();
+
+        eprintln!("[Storage] Storage initialized at {:?}", data_dir);
 
         storage
     }
@@ -67,11 +76,19 @@ impl Storage {
     fn load_history(&self) {
         let path = self.history_path();
         if path.exists() {
-            if let Ok(data) = fs::read_to_string(&path) {
-                if let Ok(history) = serde_json::from_str::<HistoryData>(&data) {
-                    *self.history.lock().unwrap() = history;
-                    return;
-                }
+            match fs::read_to_string(&path) {
+                Ok(data) => match serde_json::from_str::<HistoryData>(&data) {
+                    Ok(history) => {
+                        *self.history.lock().unwrap() = history;
+                        eprintln!(
+                            "[Storage] Loaded {} history items",
+                            self.history.lock().unwrap().items.len()
+                        );
+                        return;
+                    }
+                    Err(e) => eprintln!("[Storage] Failed to parse history: {}", e),
+                },
+                Err(e) => eprintln!("[Storage] Failed to read history file: {}", e),
             }
             eprintln!("[Storage] Failed to load history, starting fresh");
         }
@@ -81,11 +98,19 @@ impl Storage {
     fn load_favourites(&self) {
         let path = self.favourites_path();
         if path.exists() {
-            if let Ok(data) = fs::read_to_string(&path) {
-                if let Ok(favourites) = serde_json::from_str::<FavouritesData>(&data) {
-                    *self.favourites.lock().unwrap() = favourites;
-                    return;
-                }
+            match fs::read_to_string(&path) {
+                Ok(data) => match serde_json::from_str::<FavouritesData>(&data) {
+                    Ok(favourites) => {
+                        *self.favourites.lock().unwrap() = favourites;
+                        eprintln!(
+                            "[Storage] Loaded {} favourites",
+                            self.favourites.lock().unwrap().items.len()
+                        );
+                        return;
+                    }
+                    Err(e) => eprintln!("[Storage] Failed to parse favourites: {}", e),
+                },
+                Err(e) => eprintln!("[Storage] Failed to read favourites file: {}", e),
             }
             eprintln!("[Storage] Failed to load favourites, starting fresh");
         }
@@ -94,19 +119,34 @@ impl Storage {
 
     fn save_history(&self) {
         let history = self.history.lock().unwrap();
-        if let Ok(data) = serde_json::to_string_pretty(&*history) {
-            if let Err(e) = fs::write(self.history_path(), data) {
-                eprintln!("[Storage] Failed to save history: {}", e);
+        let items_count = history.items.len();
+        match serde_json::to_string_pretty(&*history) {
+            Ok(data) => {
+                let path = self.history_path();
+                match fs::write(&path, data) {
+                    Ok(_) => eprintln!("[Storage] Saved {} history items", items_count),
+                    Err(e) => eprintln!("[Storage] Failed to write history file {:?}: {}", path, e),
+                }
             }
+            Err(e) => eprintln!("[Storage] Failed to serialize history: {}", e),
         }
     }
 
     fn save_favourites(&self) {
         let favourites = self.favourites.lock().unwrap();
-        if let Ok(data) = serde_json::to_string_pretty(&*favourites) {
-            if let Err(e) = fs::write(self.favourites_path(), data) {
-                eprintln!("[Storage] Failed to save favourites: {}", e);
+        let items_count = favourites.items.len();
+        match serde_json::to_string_pretty(&*favourites) {
+            Ok(data) => {
+                let path = self.favourites_path();
+                match fs::write(&path, data) {
+                    Ok(_) => eprintln!("[Storage] Saved {} favourites", items_count),
+                    Err(e) => eprintln!(
+                        "[Storage] Failed to write favourites file {:?}: {}",
+                        path, e
+                    ),
+                }
             }
+            Err(e) => eprintln!("[Storage] Failed to serialize favourites: {}", e),
         }
     }
 
@@ -191,5 +231,119 @@ impl Storage {
     pub fn favourites_clear(&self) {
         *self.favourites.lock().unwrap() = FavouritesData::default();
         self.save_favourites();
+    }
+}
+
+pub struct SpeedCacheStorage {
+    data_dir: PathBuf,
+}
+
+impl SpeedCacheStorage {
+    pub fn new(data_dir: PathBuf) -> Self {
+        let speed_cache_dir = data_dir.join("speed_cache");
+        if let Err(e) = fs::create_dir_all(&speed_cache_dir) {
+            eprintln!(
+                "[SpeedCacheStorage] Failed to create speed cache directory {:?}: {}",
+                speed_cache_dir, e
+            );
+        }
+        eprintln!("[SpeedCacheStorage] Initialized at {:?}", speed_cache_dir);
+        Self { data_dir }
+    }
+
+    fn speed_cache_dir(&self) -> PathBuf {
+        self.data_dir.join("speed_cache")
+    }
+
+    fn cache_path(&self, network_id: &str) -> PathBuf {
+        let safe_name = network_id.replace(['/', '\\', ':', ' '], "_");
+        self.speed_cache_dir().join(format!("{}.json", safe_name))
+    }
+
+    pub fn load(&self, network_id: &str) -> Vec<SpeedTestResult> {
+        let path = self.cache_path(network_id);
+        if !path.exists() {
+            return Vec::new();
+        }
+
+        match fs::read_to_string(&path) {
+            Ok(data) => match serde_json::from_str::<Vec<SpeedTestResult>>(&data) {
+                Ok(results) => {
+                    eprintln!(
+                        "[SpeedCacheStorage] Loaded {} speed results for network '{}'",
+                        results.len(),
+                        network_id
+                    );
+                    results
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[SpeedCacheStorage] Failed to parse speed cache for '{}': {}",
+                        network_id, e
+                    );
+                    Vec::new()
+                }
+            },
+            Err(e) => {
+                eprintln!(
+                    "[SpeedCacheStorage] Failed to read speed cache for '{}': {}",
+                    network_id, e
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    pub fn save(&self, network_id: &str, results: &[SpeedTestResult]) {
+        let path = self.cache_path(network_id);
+        let dir = self.speed_cache_dir();
+        if !dir.exists() {
+            if let Err(e) = fs::create_dir_all(&dir) {
+                eprintln!(
+                    "[SpeedCacheStorage] Failed to create speed cache dir: {}",
+                    e
+                );
+                return;
+            }
+        }
+
+        match serde_json::to_string_pretty(results) {
+            Ok(data) => match fs::write(&path, data) {
+                Ok(_) => eprintln!(
+                    "[SpeedCacheStorage] Saved {} speed results for network '{}'",
+                    results.len(),
+                    network_id
+                ),
+                Err(e) => eprintln!(
+                    "[SpeedCacheStorage] Failed to write speed cache for '{}': {}",
+                    network_id, e
+                ),
+            },
+            Err(e) => eprintln!(
+                "[SpeedCacheStorage] Failed to serialize speed results: {}",
+                e
+            ),
+        }
+    }
+
+    pub fn clear_all(&self) {
+        let dir = self.speed_cache_dir();
+        if !dir.exists() {
+            return;
+        }
+
+        match fs::read_dir(&dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let _ = fs::remove_file(entry.path());
+                    }
+                }
+                eprintln!("[SpeedCacheStorage] Cleared all speed caches");
+            }
+            Err(e) => {
+                eprintln!("[SpeedCacheStorage] Failed to read speed cache dir: {}", e);
+            }
+        }
     }
 }
