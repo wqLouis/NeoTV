@@ -12,8 +12,6 @@
 	import VideoSourceOverlay from '$lib/components/VideoSourceOverlay.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
 	import { page } from '$app/state';
-	import { tvNav } from '$lib/utils/tv-navigation.svelte';
-	import type { PageContentGraph } from '$lib/utils/tv-navigation.svelte';
 	import PageTabBar from '$lib/components/business/PageTabBar.svelte';
 	import EmptyState from '$lib/components/business/EmptyState.svelte';
 	import { Film, Tv } from '@lucide/svelte';
@@ -114,76 +112,12 @@
 		{ value: 'tv', label: '电视剧', icon: Tv }
 	];
 
-	function buildBrowseGraph(): PageContentGraph {
-		const graph: PageContentGraph = {
-			defaultNode: 'browse:genre:0',
-			nodes: {}
-		};
-
-		const tags = currentTags;
-		const cols = columns;
-		const cardCount = charts.length;
-
-		// Tab nodes
-		graph.nodes['browse:tab:0'] = {
-			left: 'sidebar:2',
-			right: 'browse:tab:1',
-			down: 'browse:genre:0'
-		};
-		graph.nodes['browse:tab:1'] = {
-			left: 'sidebar:2',
-			right: 'browse:genre:0',
-			down: 'browse:genre:0'
-		};
-
-		// Genre nodes
-		tags.forEach((_, i) => {
-			const nodeId = `browse:genre:${i}`;
-			graph.nodes[nodeId] = {
-				left: i > 0 ? `browse:genre:${i - 1}` : 'browse:tab:0',
-				right: i < tags.length - 1 ? `browse:genre:${i + 1}` : 'browse:tab:1',
-				down: cardCount > 0 ? `browse:card:${i}` : undefined
-			};
-		});
-
-		// Card nodes (first few rows for boundary)
-		const maxRegisteredCards = 50;
-		const cardsToRegister = Math.min(cardCount, maxRegisteredCards);
-
-		for (let i = 0; i < cardsToRegister; i++) {
-			const row = Math.floor(i / cols);
-			const col = i % cols;
-			const nodeId = `browse:card:${i}`;
-
-			graph.nodes[nodeId] = {
-				left: col > 0 ? `browse:card:${i - 1}` : undefined,
-				right: col < cols - 1 && i + 1 < cardCount ? `browse:card:${i + 1}` : undefined,
-				up: row === 0 ? `browse:genre:${col}` : `browse:card:${i - cols}`,
-				down: i + cols < cardCount ? `browse:card:${i + cols}` : undefined
-			};
-		}
-
-		return graph;
-	}
-
-	function registerBrowseGraph() {
-		const graph = buildBrowseGraph();
-		tvNav.registerPageContentGraph('browse', graph);
-	}
-
 	$effect(() => {
 		void settingsStore.gridDensity;
 		if (scrollContainer) {
 			containerWidth = scrollContainer.clientWidth;
 			containerHeight = scrollContainer.clientHeight;
 		}
-	});
-
-	$effect(() => {
-		void currentTags;
-		void charts.length;
-		void columns;
-		registerBrowseGraph();
 	});
 
 	onMount(() => {
@@ -315,18 +249,12 @@
 />
 
 <div class="flex h-full flex-col">
-	<PageTabBar
-		options={typeOptions}
-		value={doubanSwitch}
-		onchange={handleTabChange}
-		nodePrefix="browse:tab"
-	>
+	<PageTabBar options={typeOptions} value={doubanSwitch} onchange={handleTabChange}>
 		{#snippet secondary()}
 			<div class="scrollbar-hide flex gap-2 overflow-x-auto">
 				<span class="mr-2 self-center text-sm whitespace-nowrap text-muted-foreground">类型:</span>
-				{#each currentTags as tag, i}
+				{#each currentTags as tag}
 					<button
-						data-tv-node="browse:genre:{i}"
 						class="rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors
 							{selectedGenre === tag
 							? 'bg-primary text-primary-foreground'
@@ -358,9 +286,8 @@
 				class="relative w-full flex-1 overflow-y-auto py-12"
 			>
 				<div class="isolation-isolate relative min-h-full w-full px-8 pt-4">
-					{#each visibleItems as { item, index, top, left, width, height } (item.id)}
+					{#each visibleItems as { item, top, left, width, height } (item.id)}
 						<div
-							data-tv-node="browse:card:{index}"
 							class="absolute z-0 overflow-hidden rounded-lg"
 							style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
 						>
