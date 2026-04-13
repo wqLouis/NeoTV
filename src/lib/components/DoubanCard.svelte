@@ -20,13 +20,12 @@
 </script>
 
 <div
-	class="relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-lg bg-card transition-transform hover:scale-105 focus-visible:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {fluid
+	class="relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-lg bg-card transition-transform hover:scale-105 {fluid
 		? 'w-full'
 		: 'w-40'}"
 	onclick={handleClick}
 	role="button"
-	tabindex="0"
-	onkeydown={(e) => e.key === 'Enter' && handleClick(e as unknown as MouseEvent)}
+	tabindex="-1"
 >
 	<CachedImage
 		src={item.cover_url || item.cover}

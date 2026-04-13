@@ -127,6 +127,7 @@
 	}
 	html {
 		@apply font-sans;
+		position: relative;
 	}
 
 	:focus-visible {
