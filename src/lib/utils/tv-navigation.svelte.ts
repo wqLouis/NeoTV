@@ -1,99 +1,165 @@
-export type FocusRegion = 'none' | 'tabs' | 'genres' | 'grid';
+export type FocusNodeId = string;
+
+export interface FocusNode {
+	left?: FocusNodeId;
+	right?: FocusNodeId;
+	up?: FocusNodeId;
+	down?: FocusNodeId;
+}
+
+export interface PageContentGraph {
+	defaultNode: FocusNodeId;
+	nodes: Record<FocusNodeId, FocusNode>;
+}
 
 export interface TvnavigationState {
-	focusRegion: FocusRegion;
-	focusedTabIndex: number;
-	focusedGenreIndex: number;
-	focusedCardIndex: number;
+	focusedNodeId: FocusNodeId;
+	overlayActive: boolean;
 }
+
+const SIDEBAR_COUNT = 6;
 
 export function createTvnavigation() {
 	let state = $state<TvnavigationState>({
-		focusRegion: 'tabs',
-		focusedTabIndex: 0,
-		focusedGenreIndex: -1,
-		focusedCardIndex: -1
+		focusedNodeId: 'sidebar:0',
+		overlayActive: false
 	});
 
-	function handleKeydown(
-		e: KeyboardEvent,
-		options: { tabCount: number; genreCount: number; cardCount: number },
-		callbacks: {
-			onTabChange?: (index: number) => void;
-			onGenreChange?: (index: number) => void;
-			onCardClick?: (index: number) => void;
-		}
-	) {
-		const { tabCount, genreCount, cardCount } = options;
+	let pageContentGraphs = $state<Record<string, PageContentGraph>>({});
+	let currentPageContentId = $state<string>('');
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (state.overlayActive) return;
+
+		const currentNodeId = state.focusedNodeId;
+		const isSidebar = currentNodeId.startsWith('sidebar:');
+
+		let nextNodeId: FocusNodeId | undefined;
 
 		switch (e.key) {
 			case 'ArrowUp':
 				e.preventDefault();
-				if (state.focusRegion === 'tabs') {
-					break;
-				} else if (state.focusRegion === 'genres') {
-					state.focusedGenreIndex = -1;
-					state.focusRegion = 'tabs';
-					state.focusedTabIndex = 0;
-				} else if (state.focusRegion === 'grid') {
-					state.focusedCardIndex = -1;
-					state.focusedGenreIndex = 0;
-					state.focusRegion = 'genres';
-				}
+				nextNodeId = findNextNode(currentNodeId, 'up', isSidebar);
 				break;
 			case 'ArrowDown':
 				e.preventDefault();
-				if (state.focusRegion === 'tabs') {
-					state.focusedTabIndex = -1;
-					state.focusedGenreIndex = 0;
-					state.focusRegion = 'genres';
-				} else if (state.focusRegion === 'genres') {
-					state.focusedGenreIndex = -1;
-					state.focusRegion = 'grid';
-					state.focusedCardIndex = 0;
-				} else if (state.focusRegion === 'grid') {
-					break;
-				}
+				nextNodeId = findNextNode(currentNodeId, 'down', isSidebar);
 				break;
 			case 'ArrowLeft':
 				e.preventDefault();
-				if (state.focusRegion === 'tabs') {
-					state.focusedTabIndex = Math.max(0, state.focusedTabIndex - 1);
-				} else if (state.focusRegion === 'genres') {
-					state.focusedGenreIndex = Math.max(0, state.focusedGenreIndex - 1);
-				} else if (state.focusRegion === 'grid') {
-					state.focusedCardIndex = Math.max(0, state.focusedCardIndex - 1);
-				}
+				nextNodeId = findNextNode(currentNodeId, 'left', isSidebar);
 				break;
 			case 'ArrowRight':
 				e.preventDefault();
-				if (state.focusRegion === 'tabs') {
-					state.focusedTabIndex = Math.min(tabCount - 1, state.focusedTabIndex + 1);
-				} else if (state.focusRegion === 'genres') {
-					state.focusedGenreIndex = Math.min(genreCount - 1, state.focusedGenreIndex + 1);
-				} else if (state.focusRegion === 'grid') {
-					state.focusedCardIndex = Math.min(cardCount - 1, state.focusedCardIndex + 1);
-				}
+				nextNodeId = findNextNode(currentNodeId, 'right', isSidebar);
 				break;
 			case 'Enter':
 			case ' ':
 				e.preventDefault();
-				if (state.focusRegion === 'tabs') {
-					callbacks.onTabChange?.(state.focusedTabIndex);
-				} else if (state.focusRegion === 'genres' && state.focusedGenreIndex >= 0) {
-					callbacks.onGenreChange?.(state.focusedGenreIndex);
-				} else if (state.focusRegion === 'grid' && state.focusedCardIndex >= 0) {
-					callbacks.onCardClick?.(state.focusedCardIndex);
-				}
+				triggerEnter(currentNodeId);
 				break;
+		}
+
+		if (nextNodeId && nextNodeId !== currentNodeId) {
+			state.focusedNodeId = nextNodeId;
+			scrollIntoView(nextNodeId);
 		}
 	}
 
-	function reset() {
-		state.focusRegion = 'tabs';
-		state.focusedTabIndex = 0;
-		state.focusedGenreIndex = -1;
-		state.focusedCardIndex = -1;
+	function scrollIntoView(nodeId: FocusNodeId) {
+		if (typeof document === 'undefined') return;
+		const el = document.querySelector(`[data-tv-node="${nodeId}"]`) as HTMLElement;
+		if (!el) return;
+		el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+	}
+
+	function findNextNode(
+		fromNodeId: FocusNodeId,
+		direction: 'up' | 'down' | 'left' | 'right',
+		isSidebar: boolean
+	): FocusNodeId | undefined {
+		if (isSidebar) {
+			return findSidebarNext(fromNodeId, direction);
+		} else {
+			return findContentNext(fromNodeId, direction);
+		}
+	}
+
+	function findSidebarNext(
+		fromNodeId: FocusNodeId,
+		direction: 'up' | 'down' | 'left' | 'right'
+	): FocusNodeId | undefined {
+		const index = parseInt(fromNodeId.split(':')[1], 10);
+
+		if (direction === 'up') {
+			return index > 0 ? `sidebar:${index - 1}` : undefined;
+		}
+		if (direction === 'down') {
+			return index < SIDEBAR_COUNT - 1 ? `sidebar:${index + 1}` : undefined;
+		}
+		if (direction === 'right') {
+			if (currentPageContentId && pageContentGraphs[currentPageContentId]) {
+				return pageContentGraphs[currentPageContentId].defaultNode;
+			}
+			return undefined;
+		}
+		return undefined;
+	}
+
+	function findContentNext(
+		fromNodeId: FocusNodeId,
+		direction: 'up' | 'down' | 'left' | 'right'
+	): FocusNodeId | undefined {
+		const graph = pageContentGraphs[currentPageContentId];
+		if (!graph) return undefined;
+
+		const currentNode = graph.nodes[fromNodeId];
+		if (!currentNode) {
+			return graph.defaultNode;
+		}
+
+		const target = currentNode[direction];
+		if (target) {
+			return target;
+		}
+
+		return undefined;
+	}
+
+	function triggerEnter(nodeId: FocusNodeId) {
+		const selector = `[data-tv-node="${nodeId}"]`;
+		if (typeof document !== 'undefined') {
+			const el = document.querySelector(selector) as HTMLElement;
+			if (el) {
+				el.click();
+			}
+		}
+	}
+
+	function registerPageContentGraph(pageId: string, graph: PageContentGraph) {
+		pageContentGraphs[pageId] = graph;
+	}
+
+	function setCurrentPageContent(pageId: string) {
+		currentPageContentId = pageId;
+	}
+
+	function getCurrentPageContent(): string {
+		return currentPageContentId;
+	}
+
+	function setOverlayActive(active: boolean) {
+		state.overlayActive = active;
+	}
+
+	function isOverlayActive(): boolean {
+		return state.overlayActive;
+	}
+
+	function resetFocus() {
+		if (currentPageContentId && pageContentGraphs[currentPageContentId]) {
+			state.focusedNodeId = pageContentGraphs[currentPageContentId].defaultNode;
+		}
 	}
 
 	return {
@@ -101,7 +167,13 @@ export function createTvnavigation() {
 			return state;
 		},
 		handleKeydown,
-		reset
+		registerPageContentGraph,
+		setCurrentPageContent,
+		getCurrentPageContent,
+		setOverlayActive,
+		isOverlayActive,
+		resetFocus,
+		scrollIntoView
 	};
 }
 

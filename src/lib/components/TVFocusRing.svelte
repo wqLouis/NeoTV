@@ -1,78 +1,52 @@
 <script lang="ts">
-	import { tvNav, type FocusRegion } from '$lib/utils/tv-navigation.svelte';
+	import { tvNav } from '$lib/utils/tv-navigation.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 
-	interface FocusTarget {
-		region: FocusRegion;
-		index: number;
-		element: HTMLElement;
-	}
-
-	let targetElement = $state<HTMLElement | null>(null);
 	let rect = $state<DOMRect | null>(null);
-	let scale = $state(1);
 	let opacity = $state(0);
-
-	function getTarget(region: FocusRegion, index: number): HTMLElement | null {
-		if (!browser) return null;
-
-		if (region === 'tabs') {
-			return document.querySelector(`[data-tv-tab="${index}"]`);
-		} else if (region === 'genres') {
-			return document.querySelector(`[data-tv-genre="${index}"]`);
-		} else if (region === 'grid') {
-			return document.querySelector(`[data-tv-card="${index}"]`);
-		}
-		return null;
-	}
+	let lastNodeId = $state('');
 
 	function updatePosition() {
-		const { focusRegion, focusedTabIndex, focusedGenreIndex, focusedCardIndex } = tvNav.state;
+		if (!browser) return;
 
-		if (focusRegion === 'none') {
+		if (!settingsStore.focusRingEnabled) {
 			opacity = 0;
 			return;
 		}
 
-		let index: number;
-		switch (focusRegion) {
-			case 'tabs':
-				index = focusedTabIndex;
-				break;
-			case 'genres':
-				index = focusedGenreIndex;
-				break;
-			case 'grid':
-				index = focusedCardIndex;
-				break;
-			default:
-				opacity = 0;
-				return;
-		}
+		const focused = tvNav.state.focusedNodeId;
+		const overlay = tvNav.state.overlayActive;
 
-		if (index < 0) {
+		if (overlay) {
 			opacity = 0;
 			return;
 		}
 
-		const element = getTarget(focusRegion, index);
+		if (!focused) {
+			opacity = 0;
+			return;
+		}
+
+		const selector = `[data-tv-node="${focused}"]`;
+		const element = document.querySelector(selector) as HTMLElement | null;
+		console.log('[TVFocusRing] Looking for:', selector, 'Found:', !!element);
 		if (element) {
-			targetElement = element;
 			const newRect = element.getBoundingClientRect();
 			rect = newRect;
-			scale = 1.02;
 			opacity = 1;
+			lastNodeId = focused;
 		} else {
 			opacity = 0;
 		}
 	}
 
-	$effect(() => {
-		if (browser) {
-			tvNav.state;
-			requestAnimationFrame(updatePosition);
-		}
+	onMount(() => {
+		updatePosition();
+
+		const interval = setInterval(updatePosition, 100);
+		return () => clearInterval(interval);
 	});
 </script>
 
@@ -90,8 +64,7 @@
 			border: 2px solid var(--primary, oklch(0.922 0 0));
 			border-radius: 8px;
 			box-shadow: 0 0 12px 2px var(--ring, oklch(0.556 0 0) / 0.5);
-			transition: top 150ms ease-out, left 150ms ease-out, width 150ms ease-out, height 150ms ease-out, transform 200ms ease-out, opacity 150ms ease-out;
-			transform: scale({scale});
+			transition: top 150ms ease-out, left 150ms ease-out, width 150ms ease-out, height 150ms ease-out, opacity 150ms ease-out;
 		"
 	></div>
 {/if}

@@ -129,6 +129,8 @@ pub fn run() {
             commands::preloader_set_workers,
             commands::preloader_stop,
             commands::preloader_stats,
+            commands::preloader_set_max_cache_size,
+            commands::preloader_get_max_cache_size,
             commands::history_get_all,
             commands::history_add,
             commands::history_remove,

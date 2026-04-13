@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 
 const DEFAULT_WORKER_COUNT: usize = 6;
-const MAX_CACHE_BYTES: usize = 2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_CACHE_BYTES: usize = 512 * 1024 * 1024;
 const MAX_RETRIES: usize = 3;
 
 pub static PRELOADER: Lazy<Preloader> = Lazy::new(Preloader::new);
@@ -51,6 +51,7 @@ pub struct Preloader {
     total_bytes: Arc<TokioMutex<usize>>,
     next_index: Arc<AtomicUsize>,
     total_segments: Arc<AtomicUsize>,
+    max_cache_bytes: Arc<AtomicUsize>,
 }
 
 impl Preloader {
@@ -65,12 +66,22 @@ impl Preloader {
             total_bytes: Arc::new(TokioMutex::new(0)),
             next_index: Arc::new(AtomicUsize::new(0)),
             total_segments: Arc::new(AtomicUsize::new(0)),
+            max_cache_bytes: Arc::new(AtomicUsize::new(DEFAULT_MAX_CACHE_BYTES)),
         }
     }
 
     pub fn set_worker_count(&self, count: usize) {
         let mut state = self.state.blocking_lock();
         state.worker_count = count;
+    }
+
+    pub fn set_max_cache_size(&self, bytes: usize) {
+        self.max_cache_bytes.store(bytes, Ordering::Relaxed);
+        eprintln!("[Preloader] Max cache size set to {} bytes ({} MB)", bytes, bytes / 1024 / 1024);
+    }
+
+    pub fn get_max_cache_size(&self) -> usize {
+        self.max_cache_bytes.load(Ordering::Relaxed)
     }
 
     pub async fn start(&self, content: &str, base_url: &str) {
@@ -117,6 +128,7 @@ impl Preloader {
         let total_bytes_clone = self.total_bytes.clone();
         let next_index_clone = self.next_index.clone();
         let total_segments_clone = self.total_segments.clone();
+        let max_cache_bytes_clone = self.max_cache_bytes.clone();
 
         for worker_id in 0..worker_count {
             let urls = urls_clone.clone();
@@ -126,9 +138,10 @@ impl Preloader {
             let total_bytes = total_bytes_clone.clone();
             let next_index = next_index_clone.clone();
             let total_segments = total_segments_clone.clone();
+            let max_cache_bytes = max_cache_bytes_clone.clone();
 
             self.workers.lock().await.spawn(async move {
-                worker_loop(worker_id, urls, cache, lru, state, total_bytes, next_index, total_segments).await;
+                worker_loop(worker_id, urls, cache, lru, state, total_bytes, next_index, total_segments, max_cache_bytes).await;
             });
         }
 
@@ -235,6 +248,7 @@ async fn worker_loop(
     total_bytes: Arc<TokioMutex<usize>>,
     next_index: Arc<AtomicUsize>,
     total_segments: Arc<AtomicUsize>,
+    max_cache_bytes: Arc<AtomicUsize>,
 ) {
     eprintln!("[Preloader] Worker {} started", worker_id);
 
@@ -278,7 +292,7 @@ async fn worker_loop(
                 Ok(data) => {
                     let data_len = data.len();
 
-                    evict_if_needed(&cache, &lru_queue, &total_bytes, data_len).await;
+                    evict_if_needed(&cache, &lru_queue, &total_bytes, &max_cache_bytes, data_len).await;
 
                     let mut cache_guard = cache.lock().await;
                     let mut lru_guard = lru_queue.lock().await;
@@ -316,11 +330,13 @@ async fn evict_if_needed(
     cache: &Arc<TokioMutex<HashMap<String, CachedSegment>>>,
     lru_queue: &Arc<TokioMutex<VecDeque<String>>>,
     total_bytes: &Arc<TokioMutex<usize>>,
+    max_cache_bytes: &Arc<AtomicUsize>,
     incoming_size: usize,
 ) {
+    let max_bytes = max_cache_bytes.load(Ordering::Relaxed);
     let mut total = total_bytes.lock().await;
 
-    while *total + incoming_size > MAX_CACHE_BYTES {
+    while *total + incoming_size > max_bytes {
         let mut lru = lru_queue.lock().await;
         if let Some(oldest_url) = lru.pop_front() {
             if let Some(old_seg) = cache.lock().await.remove(&oldest_url) {

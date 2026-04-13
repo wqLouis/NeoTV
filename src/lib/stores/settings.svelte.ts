@@ -15,6 +15,9 @@ export interface Settings {
 	episodesReversed: boolean;
 	gridDensity: GridDensity;
 	commentaryFilterEnabled: boolean;
+	focusRingEnabled: boolean;
+	preloaderCacheSizeMB: number;
+	preloaderWorkerCount: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -28,7 +31,10 @@ const DEFAULT_SETTINGS: Settings = {
 	autoplayNextEpisode: true,
 	episodesReversed: false,
 	gridDensity: 'standard',
-	commentaryFilterEnabled: true
+	commentaryFilterEnabled: true,
+	focusRingEnabled: true,
+	preloaderCacheSizeMB: 512,
+	preloaderWorkerCount: 6
 };
 
 export const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
@@ -91,6 +97,15 @@ function createSettingsStore() {
 		get commentaryFilterEnabled() {
 			return settings.commentaryFilterEnabled;
 		},
+		get focusRingEnabled() {
+			return settings.focusRingEnabled;
+		},
+		get preloaderCacheSizeMB() {
+			return settings.preloaderCacheSizeMB;
+		},
+		get preloaderWorkerCount() {
+			return settings.preloaderWorkerCount;
+		},
 		setSelectedApis(apis: string[]) {
 			settings.selectedApis = apis;
 			save();
@@ -148,6 +163,18 @@ function createSettingsStore() {
 			settings.commentaryFilterEnabled = enabled;
 			save();
 		},
+		setFocusRingEnabled(enabled: boolean) {
+			settings.focusRingEnabled = enabled;
+			save();
+		},
+		setPreloaderCacheSizeMB(size: number) {
+			settings.preloaderCacheSizeMB = size;
+			save();
+		},
+		setPreloaderWorkerCount(count: number) {
+			settings.preloaderWorkerCount = count;
+			save();
+		},
 		exportConfig(): string {
 			return JSON.stringify(
 				{
@@ -161,7 +188,10 @@ function createSettingsStore() {
 					autoplayNextEpisode: settings.autoplayNextEpisode,
 					episodesReversed: settings.episodesReversed,
 					gridDensity: settings.gridDensity,
-					commentaryFilterEnabled: settings.commentaryFilterEnabled
+					commentaryFilterEnabled: settings.commentaryFilterEnabled,
+					focusRingEnabled: settings.focusRingEnabled,
+					preloaderCacheSizeMB: settings.preloaderCacheSizeMB,
+					preloaderWorkerCount: settings.preloaderWorkerCount
 				},
 				null,
 				2

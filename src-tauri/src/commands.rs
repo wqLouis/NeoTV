@@ -207,6 +207,16 @@ pub async fn preloader_stats() -> (usize, usize) {
 }
 
 #[tauri::command]
+pub fn preloader_set_max_cache_size(bytes: usize) {
+    preloader::PRELOADER.set_max_cache_size(bytes);
+}
+
+#[tauri::command]
+pub fn preloader_get_max_cache_size() -> usize {
+    preloader::PRELOADER.get_max_cache_size()
+}
+
+#[tauri::command]
 pub async fn cache_clear() {
     cache::clear_all_caches().await;
 }

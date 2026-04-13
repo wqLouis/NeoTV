@@ -13,14 +13,15 @@
 		value: string;
 		onchange: (value: string) => void;
 		secondary?: Snippet;
+		nodePrefix?: string;
 	}
 
-	let { options, value, onchange, secondary }: Props = $props();
+	let { options, value, onchange, secondary, nodePrefix = 'tab' }: Props = $props();
 </script>
 
 <div class="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-2xl">
 	<div class="px-4 pt-4 pb-3">
-		<ToggleButtonGroup {options} {value} {onchange} />
+		<ToggleButtonGroup {options} {value} {onchange} {nodePrefix} />
 	</div>
 
 	{#if secondary}

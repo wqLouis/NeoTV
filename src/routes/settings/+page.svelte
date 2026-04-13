@@ -12,6 +12,7 @@
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import { toast } from 'svelte-sonner';
 	import { invoke } from '@tauri-apps/api/core';
 	import {
@@ -43,6 +44,23 @@
 		disk_count: number;
 		disk_size: number;
 	} | null>(null);
+
+	let preloaderCacheSize = $state(settingsStore.preloaderCacheSizeMB.toString());
+	let preloaderWorkerCount = $state(settingsStore.preloaderWorkerCount.toString());
+
+	function handleCacheSizeChange(v: string) {
+		preloaderCacheSize = v;
+		const size = parseInt(v, 10);
+		settingsStore.setPreloaderCacheSizeMB(size);
+		invoke('preloader_set_max_cache_size', { bytes: size * 1024 * 1024 });
+	}
+
+	function handleWorkerCountChange(v: string) {
+		preloaderWorkerCount = v;
+		const count = parseInt(v, 10);
+		settingsStore.setPreloaderWorkerCount(count);
+		invoke('preloader_set_workers', { count });
+	}
 
 	async function loadCacheStats() {
 		try {
@@ -420,6 +438,17 @@
 				<Separator />
 				<div class="flex items-center justify-between">
 					<div>
+						<Label>焦点环</Label>
+						<p class="text-sm text-muted-foreground">显示 TV 导航焦点环</p>
+					</div>
+					<Switch
+						checked={settingsStore.focusRingEnabled}
+						onCheckedChange={(v: boolean) => settingsStore.setFocusRingEnabled(v)}
+					/>
+				</div>
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
 						<Label>广告过滤</Label>
 						<p class="text-sm text-muted-foreground">过滤视频播放中的广告片段</p>
 					</div>
@@ -456,6 +485,66 @@
 						checked={settingsStore.autoplayNextEpisode}
 						onCheckedChange={(v: boolean) => settingsStore.setAutoplayNextEpisode(v)}
 					/>
+				</div>
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardHeader>
+				<CardTitle>预加载设置</CardTitle>
+			</CardHeader>
+			<CardContent class="space-y-4">
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>缓存大小</Label>
+						<p class="text-sm text-muted-foreground">视频预加载缓存最大占用</p>
+					</div>
+					<Select
+						type="single"
+						bind:value={preloaderCacheSize}
+						onValueChange={(v) => {
+							if (v) {
+								handleCacheSizeChange(v);
+							}
+						}}
+					>
+						<SelectTrigger class="w-32">
+							<span>{settingsStore.preloaderCacheSizeMB} MB</span>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="256">256 MB</SelectItem>
+							<SelectItem value="512">512 MB</SelectItem>
+							<SelectItem value="1024">1 GB</SelectItem>
+							<SelectItem value="2048">2 GB</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>并发下载数</Label>
+						<p class="text-sm text-muted-foreground">预加载时并发下载的分段数</p>
+					</div>
+					<Select
+						type="single"
+						bind:value={preloaderWorkerCount}
+						onValueChange={(v) => {
+							if (v) {
+								handleWorkerCountChange(v);
+							}
+						}}
+					>
+						<SelectTrigger class="w-24">
+							<span>{settingsStore.preloaderWorkerCount}</span>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="2">2</SelectItem>
+							<SelectItem value="4">4</SelectItem>
+							<SelectItem value="6">6</SelectItem>
+							<SelectItem value="8">8</SelectItem>
+							<SelectItem value="12">12</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 			</CardContent>
 		</Card>

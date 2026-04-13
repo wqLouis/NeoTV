@@ -7,13 +7,12 @@
 	interface Props {
 		item: DoubanSubject;
 		fluid?: boolean;
-		focusedIndex?: number;
 		onclick?: (item: DoubanSubject, e: MouseEvent) => void;
 		action?: Snippet;
 		overlay?: Snippet<[Pick<DoubanSubject, 'title' | 'types'>]>;
 	}
 
-	let { item, fluid = false, focusedIndex = -1, onclick, action, overlay }: Props = $props();
+	let { item, fluid = false, onclick, action, overlay }: Props = $props();
 
 	function handleClick(e: MouseEvent) {
 		onclick?.(item, e);
@@ -21,7 +20,6 @@
 </script>
 
 <div
-	data-tv-card={focusedIndex >= 0 ? focusedIndex : undefined}
 	class="relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-lg bg-card transition-transform hover:scale-105 focus-visible:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {fluid
 		? 'w-full'
 		: 'w-40'}"

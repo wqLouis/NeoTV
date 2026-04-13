@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import Hls from 'hls.js';
 	import PlayerControls from './PlayerControls.svelte';
 	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
@@ -77,7 +78,7 @@
 	let isUnmounting = $state(false);
 	let showDebug = $state(false);
 	let cacheStats = $state<{ count: number; bytes: number } | null>(null);
-	let workerCount = $state(6);
+	let workerCount = $state(settingsStore.preloaderWorkerCount);
 
 	let currentInstanceId = $state(0);
 	let nextInstanceId = $state(1);
@@ -473,6 +474,12 @@
 
 	onMount(() => {
 		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl });
+
+		invoke('preloader_set_max_cache_size', {
+			bytes: settingsStore.preloaderCacheSizeMB * 1024 * 1024
+		});
+		invoke('preloader_set_workers', { count: settingsStore.preloaderWorkerCount });
+
 		if (type === 'native' && src) {
 			console.log('[HLS] Using native player');
 			loading = false;

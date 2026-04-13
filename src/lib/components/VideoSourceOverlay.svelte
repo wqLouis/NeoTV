@@ -21,6 +21,7 @@
 	import { fly, fade, scale } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
+	import { tvNav } from '$lib/utils/tv-navigation.svelte';
 
 	let currentNetworkId = $state('default');
 
@@ -80,6 +81,10 @@
 	}
 
 	let { item, open = $bindable(false), originRect = null, onOpenChange, onPlay }: Props = $props();
+
+	$effect(() => {
+		tvNav.setOverlayActive(open);
+	});
 
 	let loading = $state(false);
 	let testingSources = $state(false);

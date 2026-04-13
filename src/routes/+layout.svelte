@@ -9,6 +9,8 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { modalStore } from '$lib/stores/modal.svelte';
 	import Modal from '$lib/components/Modal.svelte';
+	import TVFocusRing from '$lib/components/TVFocusRing.svelte';
+	import { tvNav } from '$lib/utils/tv-navigation.svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	let { children } = $props();
@@ -27,28 +29,47 @@
 		return pathname.startsWith(href);
 	}
 
-	function isMobileDevice(): boolean {
-		if (typeof navigator === 'undefined') return false;
-		const ua = navigator.userAgent;
-		return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+	function getPageIdFromPathname(pathname: string): string {
+		if (pathname === '/') return 'home';
+		if (pathname.startsWith('/browse')) return 'browse';
+		if (pathname.startsWith('/search')) return 'search';
+		if (pathname.startsWith('/history')) return 'history';
+		if (pathname.startsWith('/favourites')) return 'favourites';
+		if (pathname.startsWith('/settings')) return 'settings';
+		return 'home';
 	}
+
+	$effect(() => {
+		const pageId = getPageIdFromPathname(page.url.pathname);
+		if (pageId) {
+			tvNav.setCurrentPageContent(pageId);
+		}
+	});
 
 	onMount(async () => {
 		themeStore.init();
 		modalStore.init();
 		await modalStore.checkGstLibav();
+
+		const pageId = getPageIdFromPathname(page.url.pathname);
+		if (pageId) {
+			tvNav.setCurrentPageContent(pageId);
+		}
 	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
+<svelte:window onkeydown={tvNav.handleKeydown} />
+
 <div class="flex h-screen">
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<div class="flex flex-col items-center gap-2 py-2">
-				{#each upperNav as item (item.href)}
+				{#each upperNav as item, i (item.href)}
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
+						data-tv-node="sidebar:{i}"
 						href={item.href}
 						class="flex flex-col items-center justify-center gap-1 transition-all
 							{active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}"
@@ -70,9 +91,11 @@
 			<div class="flex-1"></div>
 
 			<div class="flex flex-col items-center gap-2 py-2">
-				{#each lowerNav as item (item.href)}
+				{#each lowerNav as item, i (item.href)}
 					{@const active = isActive(item.href, page.url.pathname)}
+					{@const sidebarIndex = i + upperNav.length}
 					<a
+						data-tv-node="sidebar:{sidebarIndex}"
 						href={item.href}
 						class="group flex flex-col items-center justify-center gap-1 transition-all
 							{active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}"
@@ -110,3 +133,4 @@
 
 <Sonner />
 <Modal />
+<TVFocusRing />
