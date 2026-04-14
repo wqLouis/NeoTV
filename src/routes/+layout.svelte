@@ -9,8 +9,6 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { modalStore } from '$lib/stores/modal.svelte';
 	import Modal from '$lib/components/Modal.svelte';
-	import TVFocusRing from '$lib/components/TVFocusRing.svelte';
-	import { focusNavigator } from '$lib/utils/focus-navigator';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	let { children } = $props();
@@ -37,8 +35,6 @@
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
-
-<svelte:window onkeydown={(e) => focusNavigator.handleKeydown(e)} />
 
 <div class="flex h-screen">
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
@@ -108,4 +104,3 @@
 
 <Sonner />
 <Modal />
-<TVFocusRing />

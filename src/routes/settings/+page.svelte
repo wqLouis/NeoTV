@@ -438,17 +438,6 @@
 				<Separator />
 				<div class="flex items-center justify-between">
 					<div>
-						<Label>焦点环</Label>
-						<p class="text-sm text-muted-foreground">显示 TV 导航焦点环</p>
-					</div>
-					<Switch
-						checked={settingsStore.focusRingEnabled}
-						onCheckedChange={(v: boolean) => settingsStore.setFocusRingEnabled(v)}
-					/>
-				</div>
-				<Separator />
-				<div class="flex items-center justify-between">
-					<div>
 						<Label>广告过滤</Label>
 						<p class="text-sm text-muted-foreground">过滤视频播放中的广告片段</p>
 					</div>

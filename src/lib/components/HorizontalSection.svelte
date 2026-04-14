@@ -5,7 +5,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ArrowRight } from '@lucide/svelte';
-	import { LeafGraph, Graph, END } from '$lib/utils/focus-navigator';
 
 	interface Props {
 		title: string;
@@ -14,20 +13,9 @@
 		sort: 'recommend' | 'time' | 'rank';
 		seeMoreLink?: string;
 		nodePrefix?: string;
-		graph?: { value: Graph | null };
-		onGraphReady?: () => void;
 	}
 
-	let {
-		title,
-		type,
-		tag,
-		sort,
-		seeMoreLink,
-		nodePrefix = '',
-		graph = $bindable({ value: null }),
-		onGraphReady
-	}: Props = $props();
+	let { title, type, tag, sort, seeMoreLink, nodePrefix = '' }: Props = $props();
 
 	let items = $state<DoubanSubject[]>([]);
 	let loading = $state(true);
@@ -36,60 +24,6 @@
 	let cardRect: DOMRect | null = $state(null);
 	let scrollContainer: HTMLDivElement | null = $state(null);
 	let showGradient = $state(true);
-	let sectionBuilt = false;
-
-	function detectColumns() {
-		if (!scrollContainer || items.length === 0) return 1;
-		const firstCard = scrollContainer.children[0] as HTMLElement;
-		if (!firstCard) return 1;
-		const cardWidth = firstCard.offsetWidth + 16;
-		if (cardWidth <= 0) return items.length;
-		const visibleWidth = scrollContainer.clientWidth;
-		return Math.max(1, Math.floor(visibleWidth / cardWidth));
-	}
-
-	function buildGraph(cols: number) {
-		if (!scrollContainer || items.length === 0) return;
-
-		const cards: LeafGraph[] = [];
-		for (let i = 0; i < items.length; i++) {
-			const el = scrollContainer.children[i] as HTMLElement;
-			if (el) {
-				cards.push(new LeafGraph(`${nodePrefix}:card:${i}`, el));
-			}
-		}
-
-		if (cards.length === 0) return;
-
-		const sectionGraph = new Graph(nodePrefix, cards[0].nodeId);
-		sectionGraph.itemCount = items.length;
-		sectionGraph.cols = items.length;
-
-		for (let i = 0; i < cards.length; i++) {
-			sectionGraph.registerNode(cards[i].nodeId, cards[i]);
-
-			if (i > 0) {
-				sectionGraph.addConnection(cards[i].nodeId, 'left', cards[i - 1].nodeId);
-			} else {
-				sectionGraph.addConnection(cards[i].nodeId, 'left', END);
-			}
-
-			if (i < cards.length - 1) {
-				sectionGraph.addConnection(cards[i].nodeId, 'right', cards[i + 1].nodeId);
-			} else {
-				sectionGraph.addConnection(cards[i].nodeId, 'right', END);
-			}
-
-			sectionGraph.addConnection(cards[i].nodeId, 'top', END);
-			sectionGraph.addConnection(cards[i].nodeId, 'bottom', END);
-		}
-
-		if (graph) {
-			graph.value = sectionGraph;
-		}
-		sectionBuilt = true;
-		onGraphReady?.();
-	}
 
 	onMount(async () => {
 		try {
@@ -99,14 +33,6 @@
 		} finally {
 			loading = false;
 		}
-	});
-
-	$effect(() => {
-		if (loading || !items.length || !scrollContainer || !nodePrefix) return;
-		if (sectionBuilt) return;
-
-		const cols = detectColumns();
-		buildGraph(cols);
 	});
 
 	function handleCardClick(item: DoubanSubject, e: MouseEvent) {

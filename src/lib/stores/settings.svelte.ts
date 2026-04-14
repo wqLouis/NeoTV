@@ -15,7 +15,6 @@ export interface Settings {
 	episodesReversed: boolean;
 	gridDensity: GridDensity;
 	commentaryFilterEnabled: boolean;
-	focusRingEnabled: boolean;
 	preloaderCacheSizeMB: number;
 	preloaderWorkerCount: number;
 }
@@ -32,7 +31,6 @@ const DEFAULT_SETTINGS: Settings = {
 	episodesReversed: false,
 	gridDensity: 'standard',
 	commentaryFilterEnabled: true,
-	focusRingEnabled: true,
 	preloaderCacheSizeMB: 512,
 	preloaderWorkerCount: 6
 };
@@ -97,9 +95,6 @@ function createSettingsStore() {
 		get commentaryFilterEnabled() {
 			return settings.commentaryFilterEnabled;
 		},
-		get focusRingEnabled() {
-			return settings.focusRingEnabled;
-		},
 		get preloaderCacheSizeMB() {
 			return settings.preloaderCacheSizeMB;
 		},
@@ -159,14 +154,6 @@ function createSettingsStore() {
 			settings.gridDensity = density;
 			save();
 		},
-		setCommentaryFilterEnabled(enabled: boolean) {
-			settings.commentaryFilterEnabled = enabled;
-			save();
-		},
-		setFocusRingEnabled(enabled: boolean) {
-			settings.focusRingEnabled = enabled;
-			save();
-		},
 		setPreloaderCacheSizeMB(size: number) {
 			settings.preloaderCacheSizeMB = size;
 			save();
@@ -189,7 +176,6 @@ function createSettingsStore() {
 					episodesReversed: settings.episodesReversed,
 					gridDensity: settings.gridDensity,
 					commentaryFilterEnabled: settings.commentaryFilterEnabled,
-					focusRingEnabled: settings.focusRingEnabled,
 					preloaderCacheSizeMB: settings.preloaderCacheSizeMB,
 					preloaderWorkerCount: settings.preloaderWorkerCount
 				},
