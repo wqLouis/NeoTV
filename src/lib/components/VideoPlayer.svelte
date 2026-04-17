@@ -79,9 +79,75 @@
 	let showDebug = $state(false);
 	let cacheStats = $state<{ count: number; bytes: number } | null>(null);
 	let workerCount = $state(settingsStore.preloaderWorkerCount);
+	let debugLogs = $state<{ timestamp: number; message: string; type: 'log' | 'warn' | 'error' }[]>(
+		[]
+	);
 
 	let currentInstanceId = $state(0);
 	let nextInstanceId = $state(1);
+
+	$effect(() => {
+		if (!showDebug) return;
+
+		const origLog = console.log;
+		const origWarn = console.warn;
+		const origError = console.error;
+
+		const filter =
+			(prefix: string) =>
+			(message: unknown, ...args: unknown[]) => {
+				const msg = typeof message === 'string' ? message : String(message);
+				origLog(message, ...args);
+				debugLogs = [
+					...debugLogs,
+					{
+						timestamp: Date.now(),
+						message: args.length > 0 ? `${msg} ${args.map((a) => String(a)).join(' ')}` : msg,
+						type: 'log' as const
+					}
+				].slice(-100);
+			};
+
+		const filterWarn =
+			(prefix: string) =>
+			(message: unknown, ...args: unknown[]) => {
+				const msg = typeof message === 'string' ? message : String(message);
+				origWarn(message, ...args);
+				debugLogs = [
+					...debugLogs,
+					{
+						timestamp: Date.now(),
+						message: args.length > 0 ? `${msg} ${args.map((a) => String(a)).join(' ')}` : msg,
+						type: 'warn' as const
+					}
+				].slice(-100);
+			};
+
+		const filterError =
+			(prefix: string) =>
+			(message: unknown, ...args: unknown[]) => {
+				const msg = typeof message === 'string' ? message : String(message);
+				origError(message, ...args);
+				debugLogs = [
+					...debugLogs,
+					{
+						timestamp: Date.now(),
+						message: args.length > 0 ? `${msg} ${args.map((a) => String(a)).join(' ')}` : msg,
+						type: 'error' as const
+					}
+				].slice(-100);
+			};
+
+		console.log = filter('[HLS]');
+		console.warn = filterWarn('[HLS]');
+		console.error = filterError('[HLS]');
+
+		return () => {
+			console.log = origLog;
+			console.warn = origWarn;
+			console.error = origError;
+		};
+	});
 
 	function showControlsTemporarily() {
 		showControls = true;
@@ -616,6 +682,25 @@
 	>
 		<track kind="captions" />
 	</video>
+
+	{#if showDebug && debugLogs.length > 0}
+		<div
+			class="pointer-events-none absolute inset-x-0 bottom-20 z-40 max-h-32 overflow-y-auto bg-black/30 p-2 font-mono text-xs"
+		>
+			{#each debugLogs.slice(-20) as log}
+				<div
+					class="mb-0.5 {log.type === 'error'
+						? 'text-red-400'
+						: log.type === 'warn'
+							? 'text-yellow-400'
+							: 'text-white/80'}"
+				>
+					<span class="text-white/40">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+					<span class="ml-1">{log.message}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	<PlayerControls
 		{currentTime}

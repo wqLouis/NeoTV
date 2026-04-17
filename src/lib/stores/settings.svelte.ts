@@ -6,13 +6,10 @@ export type GridDensity = 'compact' | 'standard' | 'loose';
 export interface Settings {
 	selectedApis: string[];
 	customApis: ApiSite[];
-	doubanEnabled: boolean;
-	doubanApiMode: 'all' | 'hot' | 'new';
 	yellowFilterEnabled: boolean;
 	adFilteringEnabled: boolean;
 	autoplayEnabled: boolean;
 	autoplayNextEpisode: boolean;
-	episodesReversed: boolean;
 	gridDensity: GridDensity;
 	commentaryFilterEnabled: boolean;
 	preloaderCacheSizeMB: number;
@@ -22,13 +19,10 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
 	selectedApis: ['tyyszy', 'xiaomaomi', 'dyttzy', 'bfzy', 'ruyi'],
 	customApis: [],
-	doubanEnabled: true,
-	doubanApiMode: 'all',
 	yellowFilterEnabled: true,
 	adFilteringEnabled: true,
 	autoplayEnabled: true,
 	autoplayNextEpisode: true,
-	episodesReversed: false,
 	gridDensity: 'standard',
 	commentaryFilterEnabled: true,
 	preloaderCacheSizeMB: 512,
@@ -68,12 +62,6 @@ function createSettingsStore() {
 		get customApis() {
 			return settings.customApis;
 		},
-		get doubanEnabled() {
-			return settings.doubanEnabled;
-		},
-		get doubanApiMode() {
-			return settings.doubanApiMode;
-		},
 		get yellowFilterEnabled() {
 			return settings.yellowFilterEnabled;
 		},
@@ -85,9 +73,6 @@ function createSettingsStore() {
 		},
 		get autoplayNextEpisode() {
 			return settings.autoplayNextEpisode;
-		},
-		get episodesReversed() {
-			return settings.episodesReversed;
 		},
 		get gridDensity() {
 			return settings.gridDensity;
@@ -122,14 +107,6 @@ function createSettingsStore() {
 			settings.customApis = settings.customApis.filter((_, i) => i !== index);
 			save();
 		},
-		setDoubanEnabled(enabled: boolean) {
-			settings.doubanEnabled = enabled;
-			save();
-		},
-		setDoubanApiMode(mode: 'all' | 'hot' | 'new') {
-			settings.doubanApiMode = mode;
-			save();
-		},
 		setYellowFilterEnabled(enabled: boolean) {
 			settings.yellowFilterEnabled = enabled;
 			save();
@@ -138,16 +115,16 @@ function createSettingsStore() {
 			settings.adFilteringEnabled = enabled;
 			save();
 		},
+		setCommentaryFilterEnabled(enabled: boolean) {
+			settings.commentaryFilterEnabled = enabled;
+			save();
+		},
 		setAutoplayEnabled(enabled: boolean) {
 			settings.autoplayEnabled = enabled;
 			save();
 		},
 		setAutoplayNextEpisode(enabled: boolean) {
 			settings.autoplayNextEpisode = enabled;
-			save();
-		},
-		setEpisodesReversed(reversed: boolean) {
-			settings.episodesReversed = reversed;
 			save();
 		},
 		setGridDensity(density: GridDensity) {
@@ -167,13 +144,10 @@ function createSettingsStore() {
 				{
 					selectedApis: settings.selectedApis,
 					customApis: settings.customApis,
-					doubanEnabled: settings.doubanEnabled,
-					doubanApiMode: settings.doubanApiMode,
 					yellowFilterEnabled: settings.yellowFilterEnabled,
 					adFilteringEnabled: settings.adFilteringEnabled,
 					autoplayEnabled: settings.autoplayEnabled,
 					autoplayNextEpisode: settings.autoplayNextEpisode,
-					episodesReversed: settings.episodesReversed,
 					gridDensity: settings.gridDensity,
 					commentaryFilterEnabled: settings.commentaryFilterEnabled,
 					preloaderCacheSizeMB: settings.preloaderCacheSizeMB,

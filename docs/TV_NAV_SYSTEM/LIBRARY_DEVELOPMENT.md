@@ -25,7 +25,7 @@ bun test
 - **Declarative**: Components self-declare their navigation role (leaf/graph/none)
 - **Abstraction**: `move()` function is abstracted - any navigation algorithm works
 - **Recursive**: Navigation bubbles from child to parent graph when boundaries are hit
-- **6-direction**: All `top/bottom/left/right/enter/escape` passed to move()
+- **4-direction**: All `UP/DOWN/LEFT/RIGHT` passed to move()
 - **Independent focus ring**: Visual ring is decoupled from navigation tree
 
 ## Project Structure

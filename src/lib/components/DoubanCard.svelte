@@ -17,6 +17,13 @@
 	function handleClick(e: MouseEvent) {
 		onclick?.(item, e);
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			(e.target as HTMLElement).click();
+		}
+	}
 </script>
 
 <div
@@ -24,6 +31,7 @@
 		? 'w-full'
 		: 'w-40'}"
 	onclick={handleClick}
+	onkeydown={handleKeydown}
 	role="button"
 	tabindex="-1"
 >

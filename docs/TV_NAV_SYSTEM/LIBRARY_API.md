@@ -21,7 +21,7 @@
 - **Declarative**: Components self-declare their navigation role (leaf/graph/none)
 - **Abstraction**: `move()` function is abstracted - any navigation algorithm works
 - **Recursive**: Navigation bubbles from child to parent graph when boundaries are hit
-- **6-direction**: All `top/bottom/left/right/enter/escape` passed to move()
+- **4-direction**: All `UP/DOWN/LEFT/RIGHT` passed to move()
 - **Independent focus ring**: Visual ring is decoupled from navigation tree
 
 ---
@@ -152,17 +152,14 @@ All `move()` functions must return one of:
 ### Types
 
 ```typescript
-// Direction of navigation (6 directions)
-type Direction = 'top' | 'bottom' | 'left' | 'right' | 'enter' | 'escape';
+// Direction of navigation (4 directions)
+type NavDir = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 
 // Unique identifier for a node (path-like: "home:section:0:card:5")
 type NodeId = string;
 
-// Result of a move operation (contract - must be returned correctly)
-type MoveResult =
-	| { status: 'moved'; nodeId: NodeId }
-	| { status: 'boundary'; nodeId: NodeId; direction: Direction }
-	| { status: 'none' };
+// Result of a move operation
+type MoveResult = 'BOUNDARY' | 'OK';
 
 // Anything that can be focused
 interface Focusable {
@@ -172,12 +169,8 @@ interface Focusable {
 // Abstracted move function signature
 // connections: customizable data structure (any format the component chooses)
 // currentNodeId: the current focused node
-// direction: the direction to move in (all 6 directions including enter/escape)
-type MoveFn = (
-	connections: unknown,
-	currentNodeId: NodeId | null,
-	direction: Direction
-) => MoveResult;
+// direction: the direction to move in (UP/DOWN/LEFT/RIGHT)
+type MoveFn = (connections: unknown, currentNodeId: NodeId | null, direction: NavDir) => MoveResult;
 
 // Svelte action directive options
 interface FocusOptions {
@@ -190,10 +183,10 @@ interface FocusOptions {
 
 ### Leaf vs Graph
 
-| Type      | Has move()     | Connection Graph   | enter/escape                      |
-| --------- | -------------- | ------------------ | --------------------------------- |
-| **Leaf**  | No (none)      | No                 | Not applicable - returns boundary |
-| **Graph** | Yes (required) | Yes (customizable) | Passed to move() as direction     |
+| Type      | Has move()     | Connection Graph   | Boundary handling              |
+| --------- | -------------- | ------------------ | ------------------------------ |
+| **Leaf**  | No (none)      | No                 | All directions return BOUNDARY |
+| **Graph** | Yes (required) | Yes (customizable) | Passed to move() as direction  |
 
 ### Leaf
 
@@ -216,7 +209,7 @@ When a component declares `type: 'graph'`, it provides:
 
 ```typescript
 // Example: Simple Map-based connection graph
-const connections = new Map<NodeId, Partial<Record<Direction, NodeId>>>();
+const connections = new Map<NodeId, Partial<Record<NavDir, NodeId>>>();
 
 // Example: Grid-based connection graph
 const connections = {
@@ -230,28 +223,20 @@ const connections = {
   getTarget: (current, dir) => calculateSpatialNav(current, dir)
 };
 
-// The move function receives direction INCLUDING enter and escape
+// The move function receives direction
 const move: MoveFn = (connections, currentNodeId, direction) => {
   switch (direction) {
-    case 'enter':
-      // Custom enter logic - open overlay, navigate to detail, etc.
-      return { status: 'moved', nodeId: 'overlay:source:0' };
-
-    case 'escape':
-      // Custom escape logic - close overlay, go back, etc.
-      return { status: 'moved', nodeId: 'parent:node' };
-
-    case 'top':
-    case 'bottom':
-    case 'left':
-    case 'right':
+    case 'UP':
+    case 'DOWN':
+    case 'LEFT':
+    case 'RIGHT':
       // Custom directional navigation
       return navigateDirection(connections, currentNodeId, direction);
   }
 };
 
 // Graph is created with abstracted move function
-const graph = new Graph('home:section:0', defaultEntry, connections, move);
+const graph = new Graph('home:section:0', 'home:section:0:card:0', connections, move);
 ```
 
 ### Graph Class (Conceptual)
@@ -262,6 +247,7 @@ class Graph implements Focusable {
 
 	constructor(
 		public readonly nodeId: NodeId,
+		private entryNodeId: NodeId,
 		private connections: unknown, // Customizable structure
 		private move: MoveFn // Required - the abstraction
 	) {}
@@ -270,7 +256,7 @@ class Graph implements Focusable {
 	focusEntry(): void;
 	focusNode(nodeId: NodeId): void;
 
-	move(direction: Direction): MoveResult {
+	move(direction: NavDir): MoveResult {
 		// Delegates to component's abstracted move function
 		return this.move(this.connections, this.currentNodeId, direction);
 	}
@@ -300,15 +286,15 @@ export const focusNavigator = new FocusNavigator();
 
 ## Comparison with Existing Solutions
 
-| Feature          | Svelte Focus Navigator           | Norigin Spatial Nav | CSS-only      |
-| ---------------- | -------------------------------- | ------------------- | ------------- |
-| Navigation model | Abstracted move function         | Automatic spatial   | CSS flex/grid |
-| D-pad support    | Full (all 6 directions)          | Full                | Limited       |
-| Enter/Escape     | Via move function                | Custom              | No            |
-| Overlay/modals   | Via move function + child graphs | Manual              | No            |
-| Framework        | Svelte (+ vanilla)               | React only          | Any           |
-| Customization    | Full - any algorithm             | None                | N/A           |
-| Learning curve   | Low (simple API)                 | Medium              | Low           |
+| Feature          | Svelte Focus Navigator   | Norigin Spatial Nav | CSS-only      |
+| ---------------- | ------------------------ | ------------------- | ------------- |
+| Navigation model | Abstracted move function | Automatic spatial   | CSS flex/grid |
+| D-pad support    | Full (4 directions)      | Full                | Limited       |
+| Enter/Escape     | Not supported            | Custom              | No            |
+| Overlay/modals   | Manual                   | Manual              | No            |
+| Framework        | Svelte (+ vanilla)       | React only          | Any           |
+| Customization    | Full - any algorithm     | None                | N/A           |
+| Learning curve   | Low (simple API)         | Medium              | Low           |
 
 ---
 
@@ -337,7 +323,7 @@ const move = (connections, currentNodeId, direction) => {
 	return { status: 'moved', nodeId: target };
 };
 
-const graph = new Graph('home', defaultEntry, connections, move);
+const graph = new Graph('home', 'home:card:0', connections, move);
 ```
 
 ### Trade-offs
@@ -348,5 +334,5 @@ const graph = new Graph('home', defaultEntry, connections, move);
 | Control         | Low                     | Full - any algorithm |
 | Edge cases      | May choose wrong target | Always predictable   |
 | Dynamic layouts | Works automatically     | Customizable         |
-| Overlays/modals | Manual handling         | Via move function    |
-| Enter/Escape    | Custom                  | Native to move()     |
+| Overlays/modals | Manual handling         | Manual               |
+| Enter/Escape    | Custom                  | Not supported        |

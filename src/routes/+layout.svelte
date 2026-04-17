@@ -9,9 +9,31 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { modalStore } from '$lib/stores/modal.svelte';
 	import Modal from '$lib/components/Modal.svelte';
+	import FocusRing from '$lib/nav-graph/FocusRing.svelte';
+	import { activeNavNode } from '$lib/nav-graph/store';
+	import { BOUNDARY, rootNode, type NavDir, type NavNode } from '$lib/nav-graph/navGraph';
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+
+	import HomePage from './+page.svelte';
+	import SearchPage from './search/+page.svelte';
+	import BrowsePage from './browse/+page.svelte';
+	import HistoryPage from './history/+page.svelte';
+	import FavouritesPage from './favourites/+page.svelte';
+	import SettingsPage from './settings/+page.svelte';
+
+	interface NavPageInstance {
+		buildNavNode?: () => NavNode | null;
+	}
+
 	let { children } = $props();
+	let focusRing: FocusRing;
+
+	let homePage = $state<NavPageInstance | undefined>(undefined);
+	let searchPage = $state<NavPageInstance | undefined>(undefined);
+	let browsePage = $state<NavPageInstance | undefined>(undefined);
+	let historyPage = $state<NavPageInstance | undefined>(undefined);
+	let favouritesPage = $state<NavPageInstance | undefined>(undefined);
+	let settingsPage = $state<NavPageInstance | undefined>(undefined);
 
 	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
 	const lowerNav = [
@@ -27,14 +49,74 @@
 		return pathname.startsWith(href);
 	}
 
+	function getPageName(pathname: string): string {
+		switch (pathname) {
+			case '/':
+				return 'home';
+			case '/browse':
+				return 'browse';
+			case '/history':
+				return 'history';
+			case '/favourites':
+				return 'favourites';
+			case '/settings':
+				return 'settings';
+			case '/search':
+				return 'search';
+			default:
+				return 'unknown';
+		}
+	}
+
+	function initNavNode() {
+		let pageInstance: NavPageInstance | undefined;
+		let pathname = page.url.pathname;
+
+		if (pathname === '/') pageInstance = homePage;
+		else if (pathname === '/search') pageInstance = searchPage;
+		else if (pathname === '/browse') pageInstance = browsePage;
+		else if (pathname === '/history') pageInstance = historyPage;
+		else if (pathname === '/favourites') pageInstance = favouritesPage;
+		else if (pathname === '/settings') pageInstance = settingsPage;
+
+		if (pageInstance?.buildNavNode) {
+			const pageNavNode = pageInstance.buildNavNode();
+			if (pageNavNode) {
+				const root = new rootNode(pageNavNode, pageNavNode.navGraph);
+				activeNavNode.set(root);
+			}
+		}
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		const nav = $activeNavNode;
+		if (!nav || !focusRing) return;
+
+		const dirMap: Record<string, NavDir> = {
+			ArrowUp: 'UP',
+			ArrowDown: 'DOWN',
+			ArrowLeft: 'LEFT',
+			ArrowRight: 'RIGHT'
+		};
+		const dir = dirMap[e.key];
+		if (!dir) return;
+
+		e.preventDefault();
+		const result = nav.move(dir);
+		if (result !== BOUNDARY) {
+			focusRing.updateFocus(result);
+		}
+	}
+
 	onMount(async () => {
 		themeStore.init();
 		modalStore.init();
 		await modalStore.checkGstLibav();
+		initNavNode();
 	});
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head><link rel="icon" type="image/png" href="/favicon.png" /></svelte:head>
 
 <div class="flex h-screen">
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
@@ -101,6 +183,9 @@
 		<a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
 	{/each}
 </div>
+
+<svelte:window onkeydown={handleKeydown} />
+<FocusRing bind:this={focusRing} />
 
 <Sonner />
 <Modal />

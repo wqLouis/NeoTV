@@ -5,6 +5,8 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ArrowRight } from '@lucide/svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/navGraph';
 
 	interface Props {
 		title: string;
@@ -12,10 +14,9 @@
 		tag: string;
 		sort: 'recommend' | 'time' | 'rank';
 		seeMoreLink?: string;
-		nodePrefix?: string;
 	}
 
-	let { title, type, tag, sort, seeMoreLink, nodePrefix = '' }: Props = $props();
+	let { title, type, tag, sort, seeMoreLink }: Props = $props();
 
 	let items = $state<DoubanSubject[]>([]);
 	let loading = $state(true);
@@ -24,6 +25,7 @@
 	let cardRect: DOMRect | null = $state(null);
 	let scrollContainer: HTMLDivElement | null = $state(null);
 	let showGradient = $state(true);
+	let containerEl: HTMLDivElement | null = $state(null);
 
 	onMount(async () => {
 		try {
@@ -34,6 +36,34 @@
 			loading = false;
 		}
 	});
+
+	export function buildNavNode(): NavNode | null {
+		if (!scrollContainer || items.length === 0) return null;
+		if (!containerEl) return null;
+
+		const cards = scrollContainer.querySelectorAll('[data-card]');
+		if (cards.length === 0) return null;
+
+		const navGraph = new SvelteMap<NavNode, SvelteMap<NavDir, NavNode>>();
+		const cardNodes: NavNode[] = [];
+
+		cards.forEach((card) => {
+			const cardNode = new NavNode(card as HTMLElement, LEAF, navGraph);
+			navGraph.set(cardNode, new SvelteMap());
+			cardNodes.push(cardNode);
+		});
+
+		cardNodes.forEach((node, i) => {
+			const conn = navGraph.get(node)!;
+			if (i > 0) conn.set('LEFT', cardNodes[i - 1]);
+			if (i < cardNodes.length - 1) conn.set('RIGHT', cardNodes[i + 1]);
+		});
+
+		const parentNode = new NavNode(containerEl, cardNodes[0], navGraph);
+		navGraph.set(parentNode, new SvelteMap());
+
+		return parentNode;
+	}
 
 	function handleCardClick(item: DoubanSubject, e: MouseEvent) {
 		cardRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -56,7 +86,7 @@
 	}
 </script>
 
-<div class="relative flex flex-1 flex-col overflow-hidden">
+<div bind:this={containerEl} class="relative flex flex-1 flex-col overflow-hidden">
 	<div class="mb-3 flex items-center justify-between">
 		<h2 class="text-lg font-semibold">{title}</h2>
 		<button
@@ -81,8 +111,10 @@
 				class="scrollbar-hide flex gap-4 overflow-x-auto py-2"
 				onscroll={handleScroll}
 			>
-				{#each items as item (item.id)}
-					<DoubanCard {item} onclick={handleCardClick} />
+				{#each items as item, i (item.id)}
+					<div data-card={i}>
+						<DoubanCard {item} onclick={handleCardClick} />
+					</div>
 				{/each}
 			</div>
 

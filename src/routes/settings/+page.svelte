@@ -405,17 +405,6 @@
 			<CardContent class="space-y-4">
 				<div class="flex items-center justify-between">
 					<div>
-						<Label>启用豆瓣</Label>
-						<p class="text-sm text-muted-foreground">在首页显示豆瓣推荐内容</p>
-					</div>
-					<Switch
-						checked={settingsStore.doubanEnabled}
-						onCheckedChange={(v: boolean) => settingsStore.setDoubanEnabled(v)}
-					/>
-				</div>
-				<Separator />
-				<div class="flex items-center justify-between">
-					<div>
 						<Label>黄色内容过滤</Label>
 						<p class="text-sm text-muted-foreground">搜索结果中过滤成人内容</p>
 					</div>
