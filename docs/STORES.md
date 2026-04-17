@@ -20,7 +20,7 @@ import { historyStore } from '$lib/stores/history.svelte';
 
 // Accessing state (reactive)
 settingsStore.selectedApis;  // string[]
-settingsStore.autoplayEnabled;  // boolean
+settingsStore.tvNavModeEnabled;  // boolean
 
 // Calling methods
 settingsStore.toggleApi('heimuer');
@@ -37,16 +37,15 @@ historyStore.add({ id: '123', title: 'Movie', ... });
 interface Settings {
 	selectedApis: string[]; // Enabled API source IDs
 	customApis: ApiSite[]; // Custom API sources
-	doubanEnabled: boolean; // Show Douban recommendations
-	doubanApiMode: 'all' | 'hot' | 'new'; // Douban fetch mode
 	yellowFilterEnabled: boolean; // Filter adult content
 	adFilteringEnabled: boolean; // Filter ad segments in HLS
 	autoplayEnabled: boolean; // Auto-play video
 	autoplayNextEpisode: boolean; // Auto-play next episode
-	episodesReversed: boolean; // Reverse episode order
 	gridDensity: GridDensity; // 'compact' | 'standard' | 'loose'
 	commentaryFilterEnabled: boolean; // Filter commentary videos
-	autoIntegrateSources: boolean; // Auto test and select sources
+	preloaderCacheSizeMB: number; // Preloader cache size
+	preloaderWorkerCount: number; // Preloader worker threads
+	tvNavModeEnabled: boolean; // TV remote navigation mode
 }
 ```
 
@@ -62,26 +61,25 @@ const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
 
 ### Methods
 
-| Method                             | Description                  |
-| ---------------------------------- | ---------------------------- |
-| `get selectedApis()`               | Get enabled API source IDs   |
-| `setSelectedApis(apis)`            | Set enabled API sources      |
-| `toggleApi(apiKey)`                | Toggle single API source     |
-| `addCustomApi(api)`                | Add custom API source        |
-| `removeCustomApi(index)`           | Remove custom API by index   |
-| `setDoubanEnabled(bool)`           | Enable/disable Douban        |
-| `setDoubanApiMode(mode)`           | Set Douban mode              |
-| `setYellowFilterEnabled(bool)`     | Toggle yellow filter         |
-| `setAdFilteringEnabled(bool)`      | Toggle ad filtering          |
-| `setAutoplayEnabled(bool)`         | Toggle autoplay              |
-| `setAutoplayNextEpisode(bool)`     | Toggle auto next episode     |
-| `setEpisodesReversed(bool)`        | Toggle episode order         |
-| `setGridDensity(density)`          | Set grid density             |
-| `setCommentaryFilterEnabled(bool)` | Toggle commentary filter     |
-| `setAutoIntegrateSources(bool)`    | Toggle auto source selection |
-| `exportConfig()`                   | Export settings as JSON      |
-| `importConfig(json)`               | Import settings from JSON    |
-| `reset()`                          | Reset to default settings    |
+| Method                             | Description                |
+| ---------------------------------- | -------------------------- |
+| `get selectedApis()`               | Get enabled API source IDs |
+| `setSelectedApis(apis)`            | Set enabled API sources    |
+| `toggleApi(apiKey)`                | Toggle single API source   |
+| `addCustomApi(api)`                | Add custom API source      |
+| `removeCustomApi(index)`           | Remove custom API by index |
+| `setYellowFilterEnabled(bool)`     | Toggle yellow filter       |
+| `setAdFilteringEnabled(bool)`      | Toggle ad filtering        |
+| `setCommentaryFilterEnabled(bool)` | Toggle commentary filter   |
+| `setAutoplayEnabled(bool)`         | Toggle autoplay            |
+| `setAutoplayNextEpisode(bool)`     | Toggle auto next episode   |
+| `setGridDensity(density)`          | Set grid density           |
+| `setPreloaderCacheSizeMB(size)`    | Set preloader cache size   |
+| `setPreloaderWorkerCount(count)`   | Set worker thread count    |
+| `setTvNavModeEnabled(bool)`        | Toggle TV navigation mode  |
+| `exportConfig()`                   | Export settings as JSON    |
+| `importConfig(json)`               | Import settings from JSON  |
+| `reset()`                          | Reset to default settings  |
 
 ### Default Settings
 
@@ -89,16 +87,15 @@ const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
 const DEFAULT_SETTINGS = {
 	selectedApis: ['tyyszy', 'xiaomaomi', 'dyttzy', 'bfzy', 'ruyi'],
 	customApis: [],
-	doubanEnabled: true,
-	doubanApiMode: 'all',
 	yellowFilterEnabled: true,
 	adFilteringEnabled: true,
 	autoplayEnabled: true,
 	autoplayNextEpisode: true,
-	episodesReversed: false,
 	gridDensity: 'standard',
 	commentaryFilterEnabled: true,
-	autoIntegrateSources: true
+	preloaderCacheSizeMB: 512,
+	preloaderWorkerCount: 6,
+	tvNavModeEnabled: true
 };
 ```
 

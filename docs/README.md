@@ -1,42 +1,100 @@
-# sv
+# LibreTV
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A modern video streaming application for desktop and TV devices with TV remote navigation support.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **Multi-source video search** across multiple free video APIs
+- **TV remote navigation** - Navigate with arrow keys using spatial navigation (lrud-spatial)
+- **HLS video playback** with ad filtering via FFmpeg
+- **Douban recommendations** on the home page
+- **History & Favorites** with local storage persistence
+- **Cross-platform** - Windows, macOS, Linux, and Android support
 
-```sh
-# create a new project
-npx sv create my-app
+## Tech Stack
+
+| Layer      | Technology            | Purpose                         |
+| ---------- | --------------------- | ------------------------------- |
+| Framework  | Tauri 2.x             | Native desktop/mobile app shell |
+| Frontend   | Svelte 5 + TypeScript | Reactive UI                     |
+| Styling    | TailwindCSS           | Utility-first CSS               |
+| Navigation | lrud-spatial (BBC)    | Spatial TV remote navigation    |
+| Video      | hls.js + FFmpeg       | HLS playback with transcoding   |
+| State      | Svelte Stores         | Reactive state management       |
+
+## Quick Start
+
+```bash
+# Install dependencies
+bun install
+
+# Start development server
+bun run dev
+
+# Build for production
+bun run build
 ```
 
-To recreate this project with the same configuration:
+## Documentation
 
-```sh
-# recreate this project
-bun x sv@0.15.0 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:auto" mcp="ide:opencode" paraglide="languageTags:en, zh-cn+demo:yes" --install bun ./
+### Getting Started
+
+| Document                           | Description                             |
+| ---------------------------------- | --------------------------------------- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture and design overview |
+| [NAVIGATION.md](NAVIGATION.md)     | TV remote navigation system guide       |
+
+### Features
+
+| Document                           | Description                         |
+| ---------------------------------- | ----------------------------------- |
+| [STORES.md](STORES.md)             | State management with Svelte stores |
+| [VIDEO_PLAYER.md](VIDEO_PLAYER.md) | HLS video playback architecture     |
+| [CACHE.md](CACHE.md)               | Image and data caching strategy     |
+
+### Development
+
+| Document                               | Description                          |
+| -------------------------------------- | ------------------------------------ |
+| [BUILDING.md](BUILDING.md)             | Build instructions for all platforms |
+| [TAURI_COMMANDS.md](TAURI_COMMANDS.md) | Rust backend command reference       |
+| [STORES.md](STORES.md)                 | Store interfaces and methods         |
+
+### Reference
+
+| Document                   | Description                    |
+| -------------------------- | ------------------------------ |
+| [ANDROID.md](ANDROID.md)   | Android-specific configuration |
+| [I18N.md](I18N.md)         | Internationalization setup     |
+| [PROTOCOL.md](PROTOCOL.md) | Network protocol details       |
+| [TODO.md](TODO.md)         | Planned features and tasks     |
+
+## Navigation
+
+TV navigation is enabled by default. Use arrow keys to navigate:
+
+- **Arrow keys** - Move focus between elements
+- **Enter** - Activate focused element (click)
+- **TV Nav Mode** - Can be toggled in Settings → 外观 (Appearance)
+
+See [NAVIGATION.md](NAVIGATION.md) for detailed documentation.
+
+## Project Structure
+
+```
+LibreTV/
+├── src/                      # Frontend (SvelteKit)
+│   ├── lib/
+│   │   ├── api/             # API clients
+│   │   ├── components/      # UI components
+│   │   │   ├── business/     # Business logic components
+│   │   │   └── ui/          # shadcn-svelte UI components
+│   │   └── stores/          # Svelte stores
+│   └── routes/              # SvelteKit pages
+├── src-tauri/               # Rust backend
+└── docs/                    # Documentation
 ```
 
-## Developing
+## License
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Apache-2.0
