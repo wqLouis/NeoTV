@@ -31,8 +31,14 @@ export class rootNode {
 
 		if (focus !== undefined) {
 			this.focusNode = focus;
-			console.log(`[root] ${dir}:`, focus.element, '(via graph)');
-			return focus.element;
+			let current: NavNode | typeof LEAF = focus;
+			while (typeof current !== 'string' && current.focusNode !== LEAF) {
+				current = current.focusNode as NavNode;
+			}
+			const leafElement =
+				typeof current === 'string' ? (current as unknown as NavNode).element : current.element;
+			console.log(`[root] ${dir}:`, leafElement, '(via graph)');
+			return leafElement;
 		}
 
 		console.log(`[root] ${dir}: BOUNDARY`);
@@ -73,11 +79,34 @@ export class NavNode {
 
 		if (focus !== undefined) {
 			this.focusNode = focus;
-			console.log(`[node] ${dir}:`, focus.element, '(via graph)');
-			return focus.element;
+			let current: NavNode | typeof LEAF = focus;
+			while (typeof current !== 'string' && current.focusNode !== LEAF) {
+				current = current.focusNode as NavNode;
+			}
+			const leafElement =
+				typeof current === 'string' ? (current as unknown as NavNode).element : current.element;
+			console.log(`[node] ${dir}:`, leafElement, '(via graph)');
+			return leafElement;
 		}
 
 		console.log(`[node] ${dir}: BOUNDARY`);
 		return BOUNDARY;
 	}
+}
+
+export type RebuildFn = () => void;
+
+export function createNavController(
+	root: rootNode,
+	onBoundary: RebuildFn
+): { move: (dir: NavDir) => MoveResult } {
+	return {
+		move(dir: NavDir): MoveResult {
+			const result = root.move(dir);
+			if (result === BOUNDARY) {
+				onBoundary();
+			}
+			return result;
+		}
+	};
 }

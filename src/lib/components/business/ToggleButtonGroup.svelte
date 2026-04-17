@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/navGraph';
+	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/Core';
 
 	interface ToggleOption {
 		value: string;
@@ -47,6 +47,8 @@
 
 		const parentNode = new NavNode(containerEl, tabNodes[0], navGraph);
 		navGraph.set(parentNode, new SvelteMap());
+
+		console.log('[node] ToggleButtonGroup built:', tabNodes.length, 'tabs, parent:', containerEl);
 
 		return parentNode;
 	}

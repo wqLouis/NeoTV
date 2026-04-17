@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { ArrowRight } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/navGraph';
+	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/Core';
 
 	interface Props {
 		title: string;
@@ -61,6 +61,8 @@
 
 		const parentNode = new NavNode(containerEl, cardNodes[0], navGraph);
 		navGraph.set(parentNode, new SvelteMap());
+
+		console.log('[node] HorizontalSection built:', cardNodes.length, 'cards, parent:', title);
 
 		return parentNode;
 	}
