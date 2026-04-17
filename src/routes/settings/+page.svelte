@@ -393,8 +393,19 @@
 			<CardHeader>
 				<CardTitle>外观</CardTitle>
 			</CardHeader>
-			<CardContent>
+			<CardContent class="space-y-4">
 				<ThemeSelector />
+				<Separator />
+				<div class="flex items-center justify-between">
+					<div>
+						<Label>TV 导航模式</Label>
+						<p class="text-sm text-muted-foreground">使用方向键在界面中导航</p>
+					</div>
+					<Switch
+						checked={settingsStore.tvNavModeEnabled}
+						onCheckedChange={(v: boolean) => settingsStore.setTvNavModeEnabled(v)}
+					/>
+				</div>
 			</CardContent>
 		</Card>
 

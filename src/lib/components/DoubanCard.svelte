@@ -33,7 +33,7 @@
 	onclick={handleClick}
 	onkeydown={handleKeydown}
 	role="button"
-	tabindex="-1"
+	tabindex="0"
 >
 	<CachedImage
 		src={item.cover_url || item.cover}

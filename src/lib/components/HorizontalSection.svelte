@@ -5,8 +5,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ArrowRight } from '@lucide/svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { NavNode, LEAF, type NavDir } from '$lib/nav-graph/Core';
 
 	interface Props {
 		title: string;
@@ -23,9 +21,7 @@
 	let selectedVideo: DoubanSubject | null = $state(null);
 	let showOverlay = $state(false);
 	let cardRect: DOMRect | null = $state(null);
-	let scrollContainer: HTMLDivElement | null = $state(null);
 	let showGradient = $state(true);
-	let containerEl: HTMLDivElement | null = $state(null);
 
 	onMount(async () => {
 		try {
@@ -36,36 +32,6 @@
 			loading = false;
 		}
 	});
-
-	export function buildNavNode(): NavNode | null {
-		if (!scrollContainer || items.length === 0) return null;
-		if (!containerEl) return null;
-
-		const cards = scrollContainer.querySelectorAll('[data-card]');
-		if (cards.length === 0) return null;
-
-		const navGraph = new SvelteMap<NavNode, SvelteMap<NavDir, NavNode>>();
-		const cardNodes: NavNode[] = [];
-
-		cards.forEach((card) => {
-			const cardNode = new NavNode(card as HTMLElement, LEAF, navGraph);
-			navGraph.set(cardNode, new SvelteMap());
-			cardNodes.push(cardNode);
-		});
-
-		cardNodes.forEach((node, i) => {
-			const conn = navGraph.get(node)!;
-			if (i > 0) conn.set('LEFT', cardNodes[i - 1]);
-			if (i < cardNodes.length - 1) conn.set('RIGHT', cardNodes[i + 1]);
-		});
-
-		const parentNode = new NavNode(containerEl, cardNodes[0], navGraph);
-		navGraph.set(parentNode, new SvelteMap());
-
-		console.log('[node] HorizontalSection built:', cardNodes.length, 'cards, parent:', title);
-
-		return parentNode;
-	}
 
 	function handleCardClick(item: DoubanSubject, e: MouseEvent) {
 		cardRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -81,14 +47,14 @@
 		}
 	}
 
-	function handleScroll() {
-		if (!scrollContainer) return;
-		const { scrollLeft, scrollWidth, clientWidth } = scrollContainer;
+	function handleScroll(e: Event) {
+		const target = e.target as HTMLDivElement;
+		const { scrollLeft, scrollWidth, clientWidth } = target;
 		showGradient = scrollLeft < scrollWidth - clientWidth - 10;
 	}
 </script>
 
-<div bind:this={containerEl} class="relative flex flex-1 flex-col overflow-hidden">
+<div class="relative flex flex-1 flex-col overflow-hidden">
 	<div class="mb-3 flex items-center justify-between">
 		<h2 class="text-lg font-semibold">{title}</h2>
 		<button
@@ -108,13 +74,9 @@
 		</div>
 	{:else}
 		<div class="relative">
-			<div
-				bind:this={scrollContainer}
-				class="scrollbar-hide flex gap-4 overflow-x-auto py-2"
-				onscroll={handleScroll}
-			>
+			<div class="scrollbar-hide flex gap-4 overflow-x-auto py-2" onscroll={handleScroll}>
 				{#each items as item, i (item.id)}
-					<div data-card={i}>
+					<div>
 						<DoubanCard {item} onclick={handleCardClick} />
 					</div>
 				{/each}

@@ -14,6 +14,7 @@ export interface Settings {
 	commentaryFilterEnabled: boolean;
 	preloaderCacheSizeMB: number;
 	preloaderWorkerCount: number;
+	tvNavModeEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -26,7 +27,8 @@ const DEFAULT_SETTINGS: Settings = {
 	gridDensity: 'standard',
 	commentaryFilterEnabled: true,
 	preloaderCacheSizeMB: 512,
-	preloaderWorkerCount: 6
+	preloaderWorkerCount: 6,
+	tvNavModeEnabled: true
 };
 
 export const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
@@ -86,6 +88,9 @@ function createSettingsStore() {
 		get preloaderWorkerCount() {
 			return settings.preloaderWorkerCount;
 		},
+		get tvNavModeEnabled() {
+			return settings.tvNavModeEnabled;
+		},
 		setSelectedApis(apis: string[]) {
 			settings.selectedApis = apis;
 			save();
@@ -139,6 +144,10 @@ function createSettingsStore() {
 			settings.preloaderWorkerCount = count;
 			save();
 		},
+		setTvNavModeEnabled(enabled: boolean) {
+			settings.tvNavModeEnabled = enabled;
+			save();
+		},
 		exportConfig(): string {
 			return JSON.stringify(
 				{
@@ -151,7 +160,8 @@ function createSettingsStore() {
 					gridDensity: settings.gridDensity,
 					commentaryFilterEnabled: settings.commentaryFilterEnabled,
 					preloaderCacheSizeMB: settings.preloaderCacheSizeMB,
-					preloaderWorkerCount: settings.preloaderWorkerCount
+					preloaderWorkerCount: settings.preloaderWorkerCount,
+					tvNavModeEnabled: settings.tvNavModeEnabled
 				},
 				null,
 				2
