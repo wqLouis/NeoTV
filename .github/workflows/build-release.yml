@@ -1,0 +1,169 @@
+name: Build Release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Bun dependencies
+        run: bun install
+
+      - name: Initialize Android project
+        run: |
+          rm -rf src-tauri/gen/android
+          bunx tauri android init --ci
+
+      - name: Copy custom Android files
+        run: |
+          # MainActivity
+          cp -f src-tauri/mobile/android/app/src/main/java/com/neotv/app/MainActivity.kt \
+                src-tauri/gen/android/app/src/main/java/com/neotv/app/
+
+          # Themes
+          cp -f src-tauri/mobile/android/app/src/main/res/values/themes.xml \
+                src-tauri/gen/android/app/src/main/res/values/
+          cp -f src-tauri/mobile/android/app/src/main/res/values-night/themes.xml \
+                src-tauri/gen/android/app/src/main/res/values-night/ 2>/dev/null || true
+
+          # Icons - replace default launcher icons with custom ones
+          for dir in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp -f src-tauri/icons/icon.png \
+                  src-tauri/gen/android/app/src/main/res/mipmap-${dir}/ic_launcher.png 2>/dev/null || true
+            cp -f src-tauri/icons/icon.png \
+                  src-tauri/gen/android/app/src/main/res/mipmap-${dir}/ic_launcher_round.png 2>/dev/null || true
+          done
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build Android APK (aarch64)
+        run: bunx tauri android build --target aarch64
+
+      - name: Sign APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.keystore \
+            --ks-key-alias libretv-key \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out NeoTV.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+
+      - name: Find APK
+        id: find-apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -type f | grep -v baselineProfiles | head -1)
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-aarch64
+          path: ${{ steps.find-apk.outputs.APK_PATH }}
+          retention-days: 7
+
+  build-windows:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install mingw
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+      - name: Add Rust target
+        run: rustup target add x86_64-pc-windows-gnu
+
+      - name: Install Bun dependencies
+        run: bun install
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build Windows exe + MSI
+        run: bunx tauri build --target x86_64-pc-windows-gnu
+
+      - name: Find outputs
+        id: find-outputs
+        run: |
+          EXE_PATH=$(find ./src-tauri/target/x86_64-pc-windows-gnu/release/bundle -name "*.exe" -type f | grep -v "WebView2" | grep -v "setup" | head -1)
+          MSI_PATH=$(find ./src-tauri/target/x86_64-pc-windows-gnu/release/bundle -name "*.msi" -type f | head -1)
+          echo "EXE_PATH=$EXE_PATH" >> $GITHUB_OUTPUT
+          echo "MSI_PATH=$MSI_PATH" >> $GITHUB_OUTPUT
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-win-exe
+          path: ${{ steps.find-outputs.outputs.EXE_PATH }}
+          retention-days: 7
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-win-msi
+          path: ${{ steps.find-outputs.outputs.MSI_PATH }}
+          retention-days: 7
+
+  release:
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoTV-aarch64
+
+      - name: Download Windows exe
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoTV-win-exe
+
+      - name: Download Windows MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoTV-win-msi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.apk
+            *.exe
+            *.msi
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
