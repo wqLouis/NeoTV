@@ -110,15 +110,14 @@ jobs:
         id: find-outputs
         shell: pwsh
         run: |
-          Get-ChildItem ./src-tauri/target -Filter "*.exe" -Recurse -File -EA SilentlyContinue | ForEach-Object { $_.FullName } | Where-Object { $_ -notmatch "WebView2" -and $_ -notmatch "setup" } | Select-Object -First 1 | Tee-Object -Variable EXE_PATH
-          Get-ChildItem ./src-tauri/target -Filter "*.msi" -Recurse -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName | Tee-Object -Variable MSI_PATH
-          echo "EXE_PATH=$EXE_PATH"
-          echo "MSI_PATH=$MSI_PATH"
-          echo "EXE_PATH=$EXE_PATH" >> $env:GITHUB_OUTPUT
-          echo "MSI_PATH=$MSI_PATH" >> $env:GITHUB_OUTPUT
+          $exe = Get-ChildItem ./src-tauri/target -Filter "*.exe" -Recurse -File -EA SilentlyContinue | Where-Object { $_.FullName -notmatch "WebView2" -and $_.FullName -notmatch "setup" } | Select-Object -First 1 -ExpandProperty FullName
+          $msi = Get-ChildItem ./src-tauri/target -Filter "*.msi" -Recurse -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          echo "EXE_PATH=$exe"
+          echo "MSI_PATH=$msi"
+          echo "EXE_PATH=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          echo "MSI_PATH=$msi" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload exe artifact
-        shell: pwsh
         uses: actions/upload-artifact@v4
         with:
           name: NeoTV-win-exe
@@ -127,7 +126,6 @@ jobs:
 
       - name: Upload MSI artifact
         if: steps.find-outputs.outputs.MSI_PATH != ''
-        shell: pwsh
         uses: actions/upload-artifact@v4
         with:
           name: NeoTV-win-msi
