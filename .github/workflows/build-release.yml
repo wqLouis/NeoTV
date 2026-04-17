@@ -108,15 +108,17 @@ jobs:
 
       - name: Find outputs
         id: find-outputs
+        shell: pwsh
         run: |
-          EXE_PATH=$(find ./src-tauri/target -name "*.exe" -type f | grep -v "WebView2" | grep -v "setup" | head -1)
-          MSI_PATH=$(find ./src-tauri/target -name "*.msi" -type f | head -1)
+          Get-ChildItem ./src-tauri/target -Filter "*.exe" -Recurse -File -EA SilentlyContinue | ForEach-Object { $_.FullName } | Where-Object { $_ -notmatch "WebView2" -and $_ -notmatch "setup" } | Select-Object -First 1 | Tee-Object -Variable EXE_PATH
+          Get-ChildItem ./src-tauri/target -Filter "*.msi" -Recurse -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName | Tee-Object -Variable MSI_PATH
           echo "EXE_PATH=$EXE_PATH"
           echo "MSI_PATH=$MSI_PATH"
-          echo "EXE_PATH=$EXE_PATH" >> $GITHUB_OUTPUT
-          echo "MSI_PATH=$MSI_PATH" >> $GITHUB_OUTPUT
+          echo "EXE_PATH=$EXE_PATH" >> $env:GITHUB_OUTPUT
+          echo "MSI_PATH=$MSI_PATH" >> $env:GITHUB_OUTPUT
 
       - name: Upload exe artifact
+        shell: pwsh
         uses: actions/upload-artifact@v4
         with:
           name: NeoTV-win-exe
@@ -124,6 +126,8 @@ jobs:
           retention-days: 7
 
       - name: Upload MSI artifact
+        if: steps.find-outputs.outputs.MSI_PATH != ''
+        shell: pwsh
         uses: actions/upload-artifact@v4
         with:
           name: NeoTV-win-msi
