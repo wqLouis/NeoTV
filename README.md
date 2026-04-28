@@ -2,7 +2,7 @@
 
 **一个免费、跨平台的在线视频搜索与观看应用。**
 
-[![GitHub License](https://img.shields.io/github/license/wqLouis/NeoTV-App)]
+![GitHub License](https://img.shields.io/github/license/wqLouis/NeoTV)
 
 NeoTV 是一个基于LibreTV App的免费的开源在线视频搜索与观看平台，旨在提供简洁、高效、无广告的观影体验。基于 [Tauri 2.0](https://tauri.app/) 框架开发，实现了对 Windows, macOS, Linux, 以及 Android 的原生支持。
 
