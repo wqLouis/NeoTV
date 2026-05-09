@@ -14,13 +14,6 @@
 	import { getNextFocus } from '@bbc/tv-lrud-spatial';
 	import './layout.css';
 
-	import HomePage from './+page.svelte';
-	import SearchPage from './search/+page.svelte';
-	import BrowsePage from './browse/+page.svelte';
-	import HistoryPage from './history/+page.svelte';
-	import FavouritesPage from './favourites/+page.svelte';
-	import SettingsPage from './settings/+page.svelte';
-
 	let { children } = $props();
 
 	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];

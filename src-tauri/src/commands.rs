@@ -1,6 +1,5 @@
 use crate::api::{self, HttpRequestOptions};
 use crate::cache::{self, SpeedTestResult};
-use crate::config;
 use crate::error::HttpError;
 use crate::m3u8;
 use crate::preloader;
@@ -71,93 +70,10 @@ pub async fn fetch_url(url: String, referer: Option<String>) -> Result<String, S
 }
 
 #[tauri::command]
-pub async fn search_videos(
-    query: String,
-    source_id: String,
-    custom_api_url: Option<String>,
-) -> Result<String, HttpError> {
-    let source_info = if source_id == "custom" {
-        let url = custom_api_url.ok_or_else(|| HttpError::new("Custom source selected but no API URL provided"))?;
-        config::ApiSourceInfo {
-            api_base_url: url.clone(),
-            name: "Custom".to_string(),
-            detail_base_url: None,
-            api_type: config::ApiType::Json,
-            search_path: None,
-            detail_path: None,
-        }
-    } else {
-        config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?
-    };
-
-    let base_url = source_info.api_base_url.clone();
-    let search_path = config::get_search_path(&source_info);
-    let full_url = format!("{}{}{}", base_url, search_path, urlencoding::encode(&query));
-
-    let mut headers = HashMap::new();
-    headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string());
-    headers.insert("Accept".to_string(), "application/json".to_string());
-
-    let resp = api::http_request(HttpRequestOptions {
-        url: full_url,
-        method: Some("GET".to_string()),
-        headers: Some(headers),
-        body: None,
-        timeout_secs: Some(20),
-    }).await?;
-
-    if resp.status >= 200 && resp.status < 300 {
-        Ok(resp.body)
-    } else {
-        Err(HttpError::with_details(format!("API request failed: {}", resp.status), resp.body))
-    }
-}
-
-#[tauri::command]
-pub async fn get_video_detail(video_id: String, source_id: String) -> Result<String, HttpError> {
-    let source_info = config::get_api_source(&source_id).ok_or_else(|| HttpError::new(format!("Unknown source_id: {}", source_id)))?;
-
-    let base_url = source_info.api_base_url.clone();
-    let detail_path = source_info.detail_path.unwrap_or_else(|| "/api.php/provide/vod/?ac=videolist&ids=".to_string());
-    let full_url = format!("{}{}{}", base_url, detail_path.replace("{id}", &video_id), video_id);
-
-    let mut headers = HashMap::new();
-    headers.insert("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string());
-    headers.insert("Accept".to_string(), "application/json".to_string());
-
-    let resp = api::http_request(HttpRequestOptions {
-        url: full_url,
-        method: Some("GET".to_string()),
-        headers: Some(headers),
-        body: None,
-        timeout_secs: Some(20),
-    }).await?;
-
-    if resp.status >= 200 && resp.status < 300 {
-        Ok(resp.body)
-    } else {
-        Err(HttpError::with_details(format!("HTTP {}", resp.status), resp.body))
-    }
-}
-
-#[tauri::command]
 pub async fn fetch_media_url(url: String, ad_filtering: Option<bool>) -> Result<m3u8::MediaInfo, String> {
     m3u8::fetch_and_process_m3u8(&url, ad_filtering.unwrap_or(true))
         .await
         .map_err(|HttpError { error, .. }| error)
-}
-
-#[tauri::command]
-pub async fn fetch_media_segment(url: String) -> Result<Vec<u8>, HttpError> {
-    let actual_url = if url.starts_with("app-media://") {
-        url.strip_prefix("app-media://")
-            .and_then(|e| urlencoding::decode(e).ok())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| url.clone())
-    } else {
-        url.clone()
-    };
-    m3u8::fetch_media_segment(&actual_url).await
 }
 
 #[tauri::command]
@@ -173,20 +89,11 @@ pub async fn fetch_hls_m3u8(url: String, ad_filtering: Option<bool>) -> Result<S
 
 #[tauri::command]
 pub async fn fetch_hls_segment(url: String) -> Result<Vec<u8>, String> {
-    let actual_url = if url.starts_with("app-media://") {
-        url.strip_prefix("app-media://")
-            .and_then(|e| urlencoding::decode(e).ok())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| url.clone())
-    } else {
-        url.clone()
-    };
-
-    if let Some(data) = preloader::PRELOADER.get_segment(&actual_url).await {
+    if let Some(data) = preloader::PRELOADER.get_segment(&url).await {
         return Ok(data);
     }
 
-    preloader::PRELOADER.get_segment_or_fetch(&actual_url)
+    preloader::PRELOADER.get_segment_or_fetch(&url)
         .await
         .map_err(|e| e.to_string())
 }
@@ -212,11 +119,6 @@ pub fn preloader_set_max_cache_size(bytes: usize) {
 }
 
 #[tauri::command]
-pub fn preloader_get_max_cache_size() -> usize {
-    preloader::PRELOADER.get_max_cache_size()
-}
-
-#[tauri::command]
 pub async fn cache_clear() {
     cache::clear_all_caches().await;
 }
@@ -228,6 +130,7 @@ pub async fn cache_stats() -> cache::CacheStats {
 
 #[tauri::command]
 pub async fn test_source_speed(source_id: String, custom_url: Option<String>) -> SpeedTestResult {
+    use crate::config;
     use std::time::Instant;
 
     let cache_key = if source_id == "custom" {
@@ -346,11 +249,6 @@ pub fn favourites_remove(id: String, source: String, episode: Option<String>, st
 }
 
 #[tauri::command]
-pub fn favourites_has(id: String, source: String, episode: Option<String>, state: tauri::State<'_, storage::Storage>) -> bool {
-    state.favourites_has(&id, &source, episode.as_deref())
-}
-
-#[tauri::command]
 pub fn favourites_clear(state: tauri::State<'_, storage::Storage>) {
     state.favourites_clear();
 }
@@ -383,11 +281,6 @@ pub fn speed_cache_save(network_id: String) {
 }
 
 #[tauri::command]
-pub fn speed_cache_get(source_id: String) -> Option<SpeedTestResult> {
-    cache::get_speed_cached(&source_id)
-}
-
-#[tauri::command]
 pub fn speed_cache_clear_all() {
     if let Some(storage) = SPEED_CACHE_STORAGE.get() {
         storage.clear_all();
@@ -397,73 +290,25 @@ pub fn speed_cache_clear_all() {
 
 #[tauri::command]
 pub fn get_network_id() -> String {
-    #[cfg(target_os = "android")]
-    {
-        use std::process::Command;
-
-        if let Ok(output) = Command::new("getprop")
-            .args(["wifi.interface"])
-            .output()
-        {
-            let iface = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !iface.is_empty() {
-                if let Ok(output) = Command::new("getprop")
-                    .args([&format!("net.{}.ssid", iface)])
-                    .output()
-                {
-                    let ssid = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !ssid.is_empty() && ssid != "<unknown ssid>" {
-                        return format!("android_{}", ssid);
-                    }
-                }
-            }
-        }
-
-        if let Ok(output) = Command::new("dumpsys")
-            .args(["wifi"])
-            .output()
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                if line.contains("SSID") && !line.contains("null") && !line.contains("<unknown") {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if let Some(ssid) = parts.last() {
-                        let ssid = ssid.trim();
-                        if !ssid.is_empty() {
-                            return format!("android_{}", ssid);
-                        }
-                    }
-                }
-            }
-        }
-
-        "android_unknown".to_string()
-    }
-
     #[cfg(target_os = "linux")]
     {
         use std::process::Command;
 
-        let output = Command::new("iw")
-            .args(["dev", "-M", "link"])
-            .output();
-
-        if let Ok(output) = output {
+        // Try iw first
+        if let Ok(output) = Command::new("iw").args(["dev", "-M", "link"]).output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
-                let line = line.trim();
-                if line.starts_with("SSID:") {
-                    let ssid = line.strip_prefix("SSID:").unwrap_or("").trim();
+                if let Some(ssid) = line.trim().strip_prefix("SSID:") {
+                    let ssid = ssid.trim().to_string();
                     if !ssid.is_empty() {
-                        return ssid.to_string();
+                        return ssid;
                     }
                 }
             }
         }
-        let nm_output = Command::new("nmcli")
-            .args(["-t", "-f", "ACTIVE,SSID", "dev", "wifi"])
-            .output();
-        if let Ok(output) = nm_output {
+
+        // Fallback to nmcli
+        if let Ok(output) = Command::new("nmcli").args(["-t", "-f", "ACTIVE,SSID", "dev", "wifi"]).output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 let parts: Vec<&str> = line.split(':').collect();
@@ -475,10 +320,11 @@ pub fn get_network_id() -> String {
                 }
             }
         }
+
         "unknown".to_string()
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(target_os = "linux"))]
     {
         "default".to_string()
     }

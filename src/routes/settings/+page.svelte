@@ -1,12 +1,6 @@
 <script lang="ts">
-	import {
-		settingsStore,
-		GRID_DENSITY_CLASSES,
-		type GridDensity
-	} from '$lib/stores/settings.svelte';
-	import { API_SITES } from '$lib/api/constants';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -25,14 +19,6 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import ApiSelector from '$lib/components/business/ApiSelector.svelte';
 	import ThemeSelector from '$lib/components/business/ThemeSelector.svelte';
-
-	interface BuiltinApiEntry {
-		key: string;
-		api: string;
-		name: string;
-		detail?: string;
-		adult?: boolean;
-	}
 
 	let cacheStats = $state<{
 		hits: number;
@@ -64,7 +50,6 @@
 
 	async function loadCacheStats() {
 		try {
-			const { invoke } = await import('@tauri-apps/api/core');
 			cacheStats = await invoke('cache_stats');
 		} catch {
 			cacheStats = null;
@@ -79,7 +64,6 @@
 
 	async function clearCache() {
 		try {
-			const { invoke } = await import('@tauri-apps/api/core');
 			await invoke('cache_clear');
 			toast.success('缓存已清除');
 			loadCacheStats();
@@ -95,49 +79,6 @@
 		} catch {
 			toast.error('清除速度缓存失败');
 		}
-	}
-
-	const builtinApis: BuiltinApiEntry[] = Object.entries(API_SITES).map(([key, site]) => ({
-		key,
-		...site
-	}));
-
-	function isApiSelected(key: string): boolean {
-		return settingsStore.selectedApis.includes(key);
-	}
-
-	function toggleApi(key: string) {
-		settingsStore.toggleApi(key);
-	}
-
-	function selectAllApis() {
-		const allKeys = builtinApis.map((e) => e.key);
-		settingsStore.setSelectedApis(allKeys);
-	}
-
-	function reverseSelectApis() {
-		const allKeys = builtinApis.map((e) => e.key);
-		const currentSelected = settingsStore.selectedApis;
-		const newSelection = allKeys.filter((key) => !currentSelected.includes(key));
-		settingsStore.setSelectedApis(newSelection);
-	}
-
-	let newCustomName = $state('');
-	let newCustomUrl = $state('');
-
-	function addCustomApi() {
-		if (!newCustomName.trim() || !newCustomUrl.trim()) return;
-
-		settingsStore.addCustomApi({
-			name: newCustomName.trim(),
-			api: newCustomUrl.trim()
-		});
-		newCustomName = '';
-		newCustomUrl = '';
-	}
-
-	function removeCustomApi(index: number) {
-		settingsStore.removeCustomApi(index);
 	}
 
 	let speedTestResults = $state<SpeedTestResult[]>([]);
@@ -204,7 +145,8 @@
 		isOptimizing = true;
 
 		try {
-			const allBuiltinKeys = builtinApis.map((e) => e.key);
+			const { API_SITES } = await import('$lib/api/constants');
+			const allBuiltinKeys = Object.keys(API_SITES);
 
 			const results: SpeedTestResult[] = [];
 			for (const apiKey of allBuiltinKeys) {

@@ -18,8 +18,6 @@ pub struct CacheEntry {
     pub cached_at: u64,
 }
 
-impl CacheEntry {}
-
 #[derive(Debug)]
 pub struct LruCache {
     entries: BTreeMap<String, Arc<CacheEntry>>,
@@ -426,22 +424,18 @@ impl SpeedCache {
     }
 
     pub fn get(&mut self, key: &str) -> Option<&SpeedTestCacheEntry> {
-        let entry_opt = self.entries.get(key).cloned();
-        
-        match entry_opt {
-            Some(_entry) => {
-                self.access_order.retain(|k| k != key);
-                self.access_order.push(key.to_string());
-                self.entries.get(key).map(|e| e)
-            }
-            None => None,
+        let exists = self.entries.contains_key(key);
+        if exists {
+            self.access_order.retain(|k| k != key);
+            self.access_order.push(key.to_string());
+            self.entries.get(key)
+        } else {
+            None
         }
     }
 
     pub fn insert(&mut self, key: String, result: SpeedTestResult) {
-        if let Some(_) = self.entries.remove(&key) {
-            self.access_order.retain(|k| k != &key);
-        }
+        self.access_order.retain(|k| k != &key);
 
         let entry = SpeedTestCacheEntry {
             result,
