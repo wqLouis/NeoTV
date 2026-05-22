@@ -3,5 +3,16 @@
 	"identifier": "default",
 	"description": "enables the default permissions",
 	"windows": ["main"],
-	"permissions": ["core:default", "shell:allow-open"]
+	"permissions": [
+		"core:default",
+		"shell:allow-open",
+		"core:window:allow-minimize",
+		"core:window:allow-maximize",
+		"core:window:allow-unmaximize",
+		"core:window:allow-close",
+		"core:window:allow-is-maximized",
+		"core:window:allow-start-dragging",
+		"core:window:allow-set-focus",
+		"os:allow-platform"
+	]
 }

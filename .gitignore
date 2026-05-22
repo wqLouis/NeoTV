@@ -47,5 +47,11 @@ src-tauri/target/
 scripts/release-key.jks
 dist-linux
 
+# Code signing certificates
+*.pfx
+*.pem
+*.p12
+cert_base64.txt
+
 # cache
 image_cache

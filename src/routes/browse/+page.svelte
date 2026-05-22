@@ -41,6 +41,11 @@
 	let containerHeight = $state(600);
 	let containerWidth = $state(800);
 
+	// ── TV navigation state ──────────────────────────────────────────
+	let focusedIndex = $state(0);
+	// We'll bind card elements by index using a callback pattern
+	let cardEls: HTMLElement[] = [];
+
 	const PAGE_SIZE = 20;
 	const TV_TAGS_FALLBACK = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
 
@@ -55,14 +60,13 @@
 	const totalRows = $derived(Math.ceil(charts.length / columns));
 	const totalHeight = $derived(totalRows * rowHeight);
 
-	const rowWidth = $derived(columns * itemWidth + (columns - 1) * gap);
-
+	// Larger buffer in TV nav mode so off-screen targets are still in the DOM
 	const visibleRange = $derived.by(() => {
 		if (!scrollContainer || containerHeight === 0 || charts.length === 0) {
 			return { start: 0, end: Math.min(charts.length, columns * 4) };
 		}
 
-		const bufferRows = 2;
+		const bufferRows = settingsStore.tvNavModeEnabled ? 4 : 2;
 		const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - bufferRows);
 		const endRow = Math.min(
 			totalRows - 1,
@@ -183,7 +187,12 @@
 		} finally {
 			loading = false;
 			loadingMore = false;
-			tick().then(setupObserver);
+			tick().then(() => {
+				setupObserver();
+				if (settingsStore.tvNavModeEnabled && reset && charts.length > 0) {
+					focusCard(0);
+				}
+			});
 		}
 	}
 
@@ -237,6 +246,98 @@
 		scrollContainer = el;
 		updateContainerSize();
 	}
+
+	// ── TV / keyboard grid navigation ────────────────────────────────
+	function handleContainerKeydown(e: KeyboardEvent) {
+		if (!settingsStore.tvNavModeEnabled) return;
+		if (charts.length === 0) return;
+
+		const dir = e.key;
+		if (dir !== 'ArrowUp' && dir !== 'ArrowDown' && dir !== 'ArrowLeft' && dir !== 'ArrowRight')
+			return;
+
+		// Don't interfere when the user is focused on an input/button inside the container
+		const tag = (e.target as HTMLElement).tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+
+		e.preventDefault();
+		e.stopPropagation();
+
+		// Clamp focusedIndex to valid range
+		if (focusedIndex >= charts.length) focusedIndex = 0;
+
+		let targetIndex = focusedIndex;
+
+		switch (dir) {
+			case 'ArrowRight':
+				if (targetIndex % columns < columns - 1 && targetIndex < charts.length - 1) {
+					targetIndex++;
+				}
+				break;
+			case 'ArrowLeft':
+				if (targetIndex % columns > 0 && targetIndex > 0) {
+					targetIndex--;
+				}
+				break;
+			case 'ArrowDown':
+				targetIndex = Math.min(targetIndex + columns, charts.length - 1);
+				break;
+			case 'ArrowUp':
+				if (targetIndex >= columns) {
+					targetIndex -= columns;
+				}
+				break;
+		}
+
+		if (targetIndex === focusedIndex) return;
+
+		focusedIndex = targetIndex;
+		void scrollToAndFocus(targetIndex);
+	}
+
+	function focusCard(index: number) {
+		focusedIndex = index;
+		const el = cardEls[index];
+		if (el) {
+			el.focus({ preventScroll: true });
+		}
+	}
+
+	async function scrollToAndFocus(index: number) {
+		const row = Math.floor(index / columns);
+		const targetTop = row * rowHeight;
+		const targetBottom = targetTop + cardHeight;
+
+		const viewTop = scrollTop;
+		const viewBottom = scrollTop + containerHeight;
+
+		if (targetTop < viewTop) {
+			scrollContainer?.scrollTo({ top: targetTop - rowHeight, behavior: 'smooth' });
+			await tick();
+			await new Promise((r) => requestAnimationFrame(r));
+		} else if (targetBottom > viewBottom) {
+			scrollContainer?.scrollTo({ top: targetBottom - containerHeight + rowHeight, behavior: 'smooth' });
+			await tick();
+			await new Promise((r) => requestAnimationFrame(r));
+		}
+
+		const el = cardEls[index];
+		if (el) {
+			el.focus({ preventScroll: true });
+		}
+	}
+
+	function handleCardFocus(thisIndex: number) {
+		focusedIndex = thisIndex;
+	}
+
+	function handleCardActivate(item: DoubanSubject, e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			e.stopPropagation();
+			handleVideoClick(item, e as unknown as MouseEvent);
+		}
+	}
 </script>
 
 <svelte:window
@@ -283,13 +384,21 @@
 			<div
 				bind:this={scrollContainer}
 				onscroll={handleScroll}
+				onkeydown={handleContainerKeydown}
 				class="relative w-full flex-1 overflow-y-auto py-12"
 			>
 				<div class="isolation-isolate relative min-h-full w-full px-8 pt-4">
-					{#each visibleItems as { item, top, left, width, height } (item.id)}
+					{#each visibleItems as { item, top, left, width, height, index } (item.id)}
 						<div
 							class="absolute z-0 overflow-hidden rounded-lg"
+							class:focused={index === focusedIndex}
 							style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
+							role="button"
+							tabindex="-1"
+							bind:this={(el) => { if (el) cardEls[index] = el; }}
+							onclick={(e) => handleVideoClick(item, e)}
+							onkeydown={(e) => handleCardActivate(item, e)}
+							onfocus={() => { focusedIndex = index; }}
 						>
 							<DoubanCard {item} fluid={true} onclick={handleVideoClick} />
 						</div>
@@ -327,3 +436,10 @@
 	open={showSourceOverlay}
 	onOpenChange={(open) => (showSourceOverlay = open)}
 />
+
+<style>
+	.focused {
+		outline: 2px solid var(--color-primary);
+		outline-offset: 2px;
+	}
+</style>

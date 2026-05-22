@@ -15,12 +15,12 @@ A modern video streaming application for desktop and TV devices with TV remote n
 
 | Layer      | Technology            | Purpose                         |
 | ---------- | --------------------- | ------------------------------- |
-| Framework  | Tauri 2.x             | Native desktop/mobile app shell |
+| Framework  | Tauri 2.x            | Native desktop/mobile app shell |
 | Frontend   | Svelte 5 + TypeScript | Reactive UI                     |
 | Styling    | TailwindCSS           | Utility-first CSS               |
-| Navigation | lrud-spatial (BBC)    | Spatial TV remote navigation    |
-| Video      | hls.js + FFmpeg       | HLS playback with transcoding   |
-| State      | Svelte Stores         | Reactive state management       |
+| Navigation | lrud-spatial (BBC)   | Spatial TV remote navigation    |
+| Video      | hls.js + FFmpeg      | HLS playback with transcoding   |
+| State      | Svelte Stores        | Reactive state management       |
 
 ## Quick Start
 
@@ -37,37 +37,24 @@ bun run build
 
 ## Documentation
 
-### Getting Started
-
-| Document                           | Description                             |
-| ---------------------------------- | --------------------------------------- |
+| Document | Description |
+|----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture and design overview |
-| [NAVIGATION.md](NAVIGATION.md)     | TV remote navigation system guide       |
+| [STORES.md](STORES.md) | State management with Svelte stores |
+| [SIGNING.md](SIGNING.md) | Windows code signing setup for CI/CD builds |
 
-### Features
+## Build Scripts
 
-| Document                           | Description                         |
-| ---------------------------------- | ----------------------------------- |
-| [STORES.md](STORES.md)             | State management with Svelte stores |
-| [VIDEO_PLAYER.md](VIDEO_PLAYER.md) | HLS video playback architecture     |
-| [CACHE.md](CACHE.md)               | Image and data caching strategy     |
+| Platform | Command | Output |
+|----------|---------|--------|
+| Linux | `./scripts/build-linux.sh` | `dist-linux/neotv` |
+| Windows | `./scripts/build-windows.sh` | `dist-windows/neotv.exe` |
+| Android | `./scripts/build-android.sh` | APK |
 
-### Development
-
-| Document                               | Description                          |
-| -------------------------------------- | ------------------------------------ |
-| [BUILDING.md](BUILDING.md)             | Build instructions for all platforms |
-| [TAURI_COMMANDS.md](TAURI_COMMANDS.md) | Rust backend command reference       |
-| [STORES.md](STORES.md)                 | Store interfaces and methods         |
-
-### Reference
-
-| Document                   | Description                    |
-| -------------------------- | ------------------------------ |
-| [ANDROID.md](ANDROID.md)   | Android-specific configuration |
-| [I18N.md](I18N.md)         | Internationalization setup     |
-| [PROTOCOL.md](PROTOCOL.md) | Network protocol details       |
-| [TODO.md](TODO.md)         | Planned features and tasks     |
+For cross-compiling from Linux to Windows:
+```bash
+./scripts/build-windows.sh
+```
 
 ## Navigation
 
@@ -77,8 +64,6 @@ TV navigation is enabled by default. Use arrow keys to navigate:
 - **Enter** - Activate focused element (click)
 - **TV Nav Mode** - Can be toggled in Settings → 外观 (Appearance)
 
-See [NAVIGATION.md](NAVIGATION.md) for detailed documentation.
-
 ## Project Structure
 
 ```
@@ -87,8 +72,8 @@ LibreTV/
 │   ├── lib/
 │   │   ├── api/             # API clients
 │   │   ├── components/      # UI components
-│   │   │   ├── business/     # Business logic components
-│   │   │   └── ui/          # shadcn-svelte UI components
+│   │   │   ├── business/    # Business logic components
+│   │   │   └── ui/         # shadcn-svelte UI components
 │   │   └── stores/          # Svelte stores
 │   └── routes/              # SvelteKit pages
 ├── src-tauri/               # Rust backend

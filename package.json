@@ -55,6 +55,7 @@
 		"@lucide/svelte": "^1.8.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@tauri-apps/api": "^2.10.1",
+		"@tauri-apps/plugin-os": "^2.3.2",
 		"hls.js": "^1.6.15"
 	}
 }

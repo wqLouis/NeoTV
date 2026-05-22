@@ -1,85 +1,66 @@
 # Svelte Stores
 
-NeoTV uses Svelte 5's `$state` runes for reactive state management. All stores persist data to localStorage.
+LibreTV uses Svelte 5's `$state` runes for reactive state management. Settings and search history persist to `localStorage`; history and favourites persist via the Rust backend to JSON files.
 
 ## Store Index
 
-| Store                | File                 | Purpose                       |
-| -------------------- | -------------------- | ----------------------------- |
-| `settingsStore`      | settings.svelte.ts   | User preferences and settings |
-| `historyStore`       | history.svelte.ts    | Watch history                 |
-| `favouritesStore`    | favourites.svelte.ts | Saved favorites               |
-| `searchHistoryStore` | search.svelte.ts     | Search query history          |
-| `themeStore`         | theme.svelte.ts      | Theme (light/dark/system)     |
+| Store | File | Storage | Purpose |
+|-------|------|---------|---------|
+| `settingsStore` | `settings.svelte.ts` | `localStorage` | User preferences |
+| `historyStore` | `history.svelte.ts` | Rust JSON file (via Tauri commands) | Watch history |
+| `favouritesStore` | `favourites.svelte.ts` | Rust JSON file (via Tauri commands) | Saved favorites |
+| `searchHistoryStore` | `search.svelte.ts` | `localStorage` | Search query history |
+| `themeStore` | `theme.svelte.ts` | `localStorage` | Theme (light/dark/system) |
+| `modalStore` | `modal.svelte.ts` | In-memory | Modal dialog state |
 
-## Usage Pattern
+## Quick Usage
 
 ```typescript
 import { settingsStore } from '$lib/stores/settings.svelte';
-import { historyStore } from '$lib/stores/history.svelte';
 
-// Accessing state (reactive)
-settingsStore.selectedApis;  // string[]
-settingsStore.tvNavModeEnabled;  // boolean
+// Reactive reads
+settingsStore.selectedApis;   // string[]
+settingsStore.tvNavModeEnabled; // boolean
+settingsStore.autoplayEnabled; // boolean
 
-// Calling methods
+// Mutations
 settingsStore.toggleApi('heimuer');
-historyStore.add({ id: '123', title: 'Movie', ... });
+settingsStore.setAutoplayEnabled(false);
 ```
+
+---
 
 ## Settings Store
 
 **File:** `src/lib/stores/settings.svelte.ts`
 
-### Interface
+### State Shape
 
 ```typescript
 interface Settings {
-	selectedApis: string[]; // Enabled API source IDs
-	customApis: ApiSite[]; // Custom API sources
-	yellowFilterEnabled: boolean; // Filter adult content
-	adFilteringEnabled: boolean; // Filter ad segments in HLS
-	autoplayEnabled: boolean; // Auto-play video
-	autoplayNextEpisode: boolean; // Auto-play next episode
-	gridDensity: GridDensity; // 'compact' | 'standard' | 'loose'
-	commentaryFilterEnabled: boolean; // Filter commentary videos
-	preloaderCacheSizeMB: number; // Preloader cache size
-	preloaderWorkerCount: number; // Preloader worker threads
-	tvNavModeEnabled: boolean; // TV remote navigation mode
+	selectedApis: string[];             // Enabled API source IDs
+	customApis: ApiSite[];              // Custom API sources (name + url)
+	yellowFilterEnabled: boolean;        // Filter adult content
+	adFilteringEnabled: boolean;         // Filter ad segments in HLS
+	autoplayEnabled: boolean;            // Auto-play on load
+	autoplayNextEpisode: boolean;       // Auto-play next episode
+	gridDensity: GridDensity;            // 'compact' | 'standard' | 'loose'
+	commentaryFilterEnabled: boolean;    // Filter commentary/review videos
+	preloaderCacheSizeMB: number;        // Prefetch cache max size in MB
+	preloaderWorkerCount: number;        // Number of prefetch workers
+	tvNavModeEnabled: boolean;           // TV remote-style focus navigation
 }
 ```
 
 ### Grid Density Classes
 
 ```typescript
-const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
+export const GRID_DENSITY_CLASSES: Record<GridDensity, string> = {
 	compact: 'grid-cols-8 gap-8',
 	standard: 'grid-cols-6 gap-8',
 	loose: 'grid-cols-5 gap-8'
 };
 ```
-
-### Methods
-
-| Method                             | Description                |
-| ---------------------------------- | -------------------------- |
-| `get selectedApis()`               | Get enabled API source IDs |
-| `setSelectedApis(apis)`            | Set enabled API sources    |
-| `toggleApi(apiKey)`                | Toggle single API source   |
-| `addCustomApi(api)`                | Add custom API source      |
-| `removeCustomApi(index)`           | Remove custom API by index |
-| `setYellowFilterEnabled(bool)`     | Toggle yellow filter       |
-| `setAdFilteringEnabled(bool)`      | Toggle ad filtering        |
-| `setCommentaryFilterEnabled(bool)` | Toggle commentary filter   |
-| `setAutoplayEnabled(bool)`         | Toggle autoplay            |
-| `setAutoplayNextEpisode(bool)`     | Toggle auto next episode   |
-| `setGridDensity(density)`          | Set grid density           |
-| `setPreloaderCacheSizeMB(size)`    | Set preloader cache size   |
-| `setPreloaderWorkerCount(count)`   | Set worker thread count    |
-| `setTvNavModeEnabled(bool)`        | Toggle TV navigation mode  |
-| `exportConfig()`                   | Export settings as JSON    |
-| `importConfig(json)`               | Import settings from JSON  |
-| `reset()`                          | Reset to default settings  |
 
 ### Default Settings
 
@@ -99,9 +80,27 @@ const DEFAULT_SETTINGS = {
 };
 ```
 
-### Storage Key
+### Methods
 
-`localStorage.getItem('appSettings')`
+| Method | Description |
+|--------|-------------|
+| `selectedApis` (getter) | Get enabled API source IDs |
+| `setSelectedApis(apis)` | Replace enabled APIs |
+| `toggleApi(apiKey)` | Toggle a single API source |
+| `addCustomApi(api)` | Add a custom API source |
+| `removeCustomApi(index)` | Remove custom API by index |
+| `setYellowFilterEnabled(bool)` | Toggle yellow content filter |
+| `setAdFilteringEnabled(bool)` | Toggle ad filtering |
+| `setAutoplayEnabled(bool)` | Toggle autoplay |
+| `setAutoplayNextEpisode(bool)` | Toggle auto next episode |
+| `setGridDensity(density)` | Set grid density |
+| `setCommentaryFilterEnabled(bool)` | Toggle commentary filter |
+| `setPreloaderCacheSizeMB(size)` | Set prefetch cache size |
+| `setPreloaderWorkerCount(count)` | Set prefetch worker count |
+| `setTvNavModeEnabled(bool)` | Toggle TV navigation mode |
+| `exportConfig()` | Export settings as JSON string |
+| `importConfig(jsonStr)` | Import settings from JSON string |
+| `reset()` | Reset to defaults |
 
 ---
 
@@ -109,40 +108,35 @@ const DEFAULT_SETTINGS = {
 
 **File:** `src/lib/stores/history.svelte.ts`
 
+Persistence is handled by the Rust backend via Tauri commands. The store loads history on initialization and syncs changes through `invoke()`.
+
 ### Interface
 
 ```typescript
 interface HistoryItem {
-	id: string; // Video ID
-	title: string; // Video title
-	source: string; // Source identifier
-	cover?: string; // Thumbnail URL
-	episode?: string; // Episode label
-	episodeIndex?: number; // Episode index
-	position: number; // Playback position (seconds)
-	duration: number; // Total duration (seconds)
-	timestamp: number; // Last updated timestamp
+	id: string;            // Video ID
+	title: string;        // Video title
+	source: string;        // Source identifier
+	cover?: string;        // Thumbnail URL
+	episode?: string;      // Episode label
+	episodeIndex?: number;  // Episode index
 }
 ```
 
 ### Methods
 
-| Method                                                    | Description                |
-| --------------------------------------------------------- | -------------------------- |
-| `get items()`                                             | Get all history items      |
-| `add(item)`                                               | Add or update history item |
-| `updatePosition(id, source, episode, position, duration)` | Update playback position   |
-| `remove(id, source, episode?)`                            | Remove specific item       |
-| `clear()`                                                 | Clear all history          |
+| Method | Description |
+|--------|-------------|
+| `items` (getter) | All history items (newest first) |
+| `loaded` (getter) | Whether initial load from Rust completed |
+| `add(item)` | Add or update an item (max 100 items) |
+| `remove(id, source, episode?)` | Remove a specific item |
+| `clear()` | Clear all history |
+| `refresh()` | Re-load from Rust backend |
 
-### Storage Key
+### Dedup Logic
 
-`localStorage.getItem('viewingHistory')`
-
-### Notes
-
-- Maximum 100 items (older items are removed)
-- Items are uniquely identified by `id + source + episode`
+Items are uniquely identified by `id + source + episode`. Adding an existing item updates it in-place instead of duplicating.
 
 ---
 
@@ -150,33 +144,33 @@ interface HistoryItem {
 
 **File:** `src/lib/stores/favourites.svelte.ts`
 
+Persistence is handled by the Rust backend via Tauri commands. The store communicates using snake_case JSON for the Rust side.
+
 ### Interface
 
 ```typescript
 interface FavouriteItem {
-	id: string; // Video ID
-	title: string; // Video title
-	source: string; // Source identifier
-	cover?: string; // Thumbnail URL
-	episode?: string; // Episode label
-	episodeIndex?: number; // Episode index
-	addedAt: number; // Timestamp when added
+	id: string;            // Video ID
+	title: string;         // Video title
+	source: string;        // Source identifier
+	cover?: string;        // Thumbnail URL
+	episode?: string;      // Episode label
+	episodeIndex?: number;  // Episode index
+	addedAt: number;       // Unix timestamp
 }
 ```
 
 ### Methods
 
-| Method                         | Description                |
-| ------------------------------ | -------------------------- |
-| `get items()`                  | Get all favourites         |
-| `add(item)`                    | Add to favourites          |
-| `remove(id, source, episode?)` | Remove from favourites     |
-| `has(id, source, episode?)`    | Check if item is favorited |
-| `clear()`                      | Clear all favourites       |
-
-### Storage Key
-
-`localStorage.getItem('favourites')`
+| Method | Description |
+|--------|-------------|
+| `items` (getter) | All favourites (newest first) |
+| `loaded` (getter) | Whether initial load from Rust completed |
+| `add(item)` | Add to favourites (no-op if already exists) |
+| `remove(id, source, episode?)` | Remove from favourites |
+| `has(id, source, episode?)` | Check if item is favourited (synchronous, local check) |
+| `clear()` | Clear all favourites |
+| `refresh()` | Re-load from Rust backend |
 
 ---
 
@@ -184,23 +178,16 @@ interface FavouriteItem {
 
 **File:** `src/lib/stores/search.svelte.ts`
 
+Persists to `localStorage`. Simple string list.
+
 ### Methods
 
-| Method          | Description                       |
-| --------------- | --------------------------------- |
-| `get items()`   | Get search history (newest first) |
-| `add(query)`    | Add search query                  |
-| `remove(query)` | Remove specific query             |
-| `clear()`       | Clear all search history          |
-
-### Storage Key
-
-`localStorage.getItem('videoSearchHistory')`
-
-### Notes
-
-- Maximum 20 items
-- Duplicate queries are moved to top
+| Method | Description |
+|--------|-------------|
+| `items` (getter) | Search history (newest first) |
+| `add(query)` | Add a search query (dedup, max 20) |
+| `remove(query)` | Remove a specific query |
+| `clear()` | Clear all search history |
 
 ---
 
@@ -216,66 +203,88 @@ type Theme = 'light' | 'dark' | 'system';
 
 ### Methods
 
-| Method          | Description                               |
-| --------------- | ----------------------------------------- |
-| `get current()` | Get current theme setting                 |
-| `setTheme(t)`   | Set theme (light/dark/system)             |
-| `init()`        | Apply theme and listen for system changes |
-
-### Storage Key
-
-`localStorage.getItem('theme')`
+| Method | Description |
+|--------|-------------|
+| `current` (getter) | Current theme setting |
+| `setTheme(t)` | Set theme |
+| `init()` | Apply theme to DOM, listen for system changes |
 
 ### Behavior
 
-- `light`: Always use light mode
-- `dark`: Always use dark mode
-- `system`: Follow system preference (`prefers-color-scheme`)
+| Setting | Result |
+|---------|--------|
+| `light` | Always light mode |
+| `dark` | Always dark mode |
+| `system` | Follow OS preference via `prefers-color-scheme` |
 
-### Implementation
+Applied by toggling `dark` class on `<html>` element.
 
-Theme is applied by toggling `dark` class on `<html>` element.
+---
+
+## Modal Store
+
+**File:** `src/lib/stores/modal.svelte.ts`
+
+Unlike other stores, this is a simple module-level state (not a factory pattern).
+
+### Interface
+
+```typescript
+interface ModalInfo {
+	title: string;
+	content: string;
+	confirmText?: string;
+	cancelText?: string;
+	onConfirm?: () => void;
+	onCancel?: () => void;
+}
+```
+
+### Usage
+
+```typescript
+import { modalStore } from '$lib/stores/modal.svelte';
+
+modalStore.show({ title: 'Warning', content: 'Are you sure?' });
+modalStore.hide();
+
+// On Linux, also checks for missing gst-libav at startup:
+await modalStore.checkGstLibav();
+```
 
 ---
 
 ## Creating New Stores
 
-Example of creating a new store using Svelte 5 runes:
+Example using Svelte 5 runes:
 
 ```typescript
 // src/lib/stores/example.svelte.ts
 import { browser } from '$app/environment';
 
-interface ExampleItem {
-	id: string;
-	name: string;
-}
-
 function createExampleStore() {
-	let items = $state<ExampleItem[]>(loadItems());
+	let items = $state<string[]>(load());
 
-	function loadItems(): ExampleItem[] {
+	function load(): string[] {
 		if (!browser) return [];
-		const stored = localStorage.getItem('exampleItems');
+		const stored = localStorage.getItem('example');
 		return stored ? JSON.parse(stored) : [];
 	}
 
 	function save() {
 		if (browser) {
-			localStorage.setItem('exampleItems', JSON.stringify(items));
+			localStorage.setItem('example', JSON.stringify(items));
 		}
 	}
 
 	return {
-		get items() {
-			return items;
-		},
-		add(item: ExampleItem) {
-			items = [item, ...items];
+		get items() { return items; },
+		add(item: string) {
+			items = [...items, item];
 			save();
 		},
-		remove(id: string) {
-			items = items.filter((i) => i.id !== id);
+		remove(item: string) {
+			items = items.filter(i => i !== item);
 			save();
 		}
 	};
@@ -286,7 +295,7 @@ export const exampleStore = createExampleStore();
 
 ### Key Points
 
-1. Use `$state` rune for reactive state
-2. Check `browser` before accessing localStorage
-3. Use `save()` function to persist changes
-4. Return getters and methods from the factory function
+1. Use `$state` for reactive state
+2. Check `browser` before accessing `localStorage`
+3. Call `save()` after mutations to persist
+4. Return getters + methods from the factory function

@@ -22,6 +22,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             commands::make_http_request,
             commands::fetch_url,
@@ -47,7 +48,11 @@ pub fn run() {
             commands::speed_cache_save,
             commands::speed_cache_clear_all,
             commands::get_network_id,
-            #[cfg(target_os = "linux")] commands::get_gst_libav_status
+            #[cfg(target_os = "linux")] commands::get_gst_libav_status,
+            #[cfg(any(target_os = "windows", target_os = "linux"))] commands::window_minimize,
+            #[cfg(any(target_os = "windows", target_os = "linux"))] commands::window_maximize,
+            #[cfg(any(target_os = "windows", target_os = "linux"))] commands::window_close,
+            #[cfg(any(target_os = "windows", target_os = "linux"))] commands::window_is_maximized
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");

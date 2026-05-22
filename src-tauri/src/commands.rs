@@ -7,6 +7,34 @@ use crate::storage::{self, HistoryItem, FavouriteItem, SpeedCacheStorage};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[tauri::command]
+pub fn window_minimize(window: tauri::Window) {
+    let _ = window.minimize();
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[tauri::command]
+pub fn window_maximize(window: tauri::Window) {
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[tauri::command]
+pub fn window_close(window: tauri::Window) {
+    let _ = window.close();
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[tauri::command]
+pub fn window_is_maximized(window: tauri::Window) -> bool {
+    window.is_maximized().unwrap_or(false)
+}
+
 static SPEED_CACHE_STORAGE: OnceLock<SpeedCacheStorage> = OnceLock::new();
 
 pub fn init_speed_cache_storage(data_dir: std::path::PathBuf) {

@@ -12,9 +12,19 @@
 	import Modal from '$lib/components/Modal.svelte';
 	import FocusRing from '$lib/components/FocusRing.svelte';
 	import { getNextFocus } from '@bbc/tv-lrud-spatial';
+	import TrafficLights from '$lib/components/TrafficLights.svelte';
+	import { platform } from '@tauri-apps/plugin-os';
 	import './layout.css';
 
 	let { children } = $props();
+
+	// Show traffic lights only on Windows and Linux (not macOS)
+	let showTrafficLights = $state(false);
+
+	onMount(async () => {
+		const os = await platform();
+		showTrafficLights = os === 'windows' || os === 'linux';
+	});
 
 	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
 	const lowerNav = [
@@ -52,6 +62,10 @@
 </script>
 
 <svelte:head><link rel="icon" type="image/png" href="/favicon.png" /></svelte:head>
+
+{#if showTrafficLights}
+	<TrafficLights />
+{/if}
 
 <div class="flex h-screen">
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
