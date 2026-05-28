@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto, beforeNavigate } from '$app/navigation';
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, isTauri } from '@tauri-apps/api/core';
 	import { search, type SearchResult } from '$lib/api/search';
 	import type { DoubanSubject } from '$lib/api/douban';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -26,6 +26,7 @@
 
 	async function getNetworkId(): Promise<string> {
 		try {
+			if (!isTauri()) return 'default';
 			const networkId = await invoke<string>('get_network_id');
 			return networkId;
 		} catch {

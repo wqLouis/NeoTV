@@ -18,7 +18,18 @@ pub use storage::{HistoryItem, FavouriteItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    eprintln!("[LibreTV] App starting");
+    // Fix blank white window on Linux with NVIDIA proprietary drivers.
+    // The webkit2gtk-nvidia-quirk crate auto-detects NVIDIA GPU and session type.
+    #[cfg(target_os = "linux")]
+    {
+        webkit2gtk_nvidia_quirk::apply_workaround_with_options(
+            webkit2gtk_nvidia_quirk::ApplyWorkaroundOptions::default()
+        );
+        // Enable HLS playback via GStreamer on Linux
+        std::env::set_var("WEBKIT_GST_ENABLE_HLS_SUPPORT", "1");
+    }
+
+    eprintln!("[NeoTV] App starting");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -55,6 +66,13 @@ pub fn run() {
             #[cfg(any(target_os = "windows", target_os = "linux"))] commands::window_is_maximized
         ])
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            eprintln!("[NeoTV] GPU workaround applied: {:?}", webkit2gtk_nvidia_quirk::needs_workaround());
+
+            let window = app.get_webview_window("main").expect("Failed to get main window");
+            let url = window.url();
+            eprintln!("[NeoTV] WebView URL: {:?}", url);
+
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
             let cache_dir = app_data_dir.join("cache");
             fs::create_dir_all(&cache_dir).ok();
@@ -68,7 +86,7 @@ pub fn run() {
             app.manage(storage);
 
             commands::init_speed_cache_storage(app_data_dir.clone());
-            eprintln!("[LibreTV] Tauri setup complete, cache dir: {:?}", cache_dir);
+            eprintln!("[NeoTV] Tauri setup complete, cache dir: {:?}", cache_dir);
             
             Ok(())
         })

@@ -1,4 +1,4 @@
-import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { intlayer } from 'vite-intlayer';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -25,8 +25,19 @@ function lrudSpatialBuild(): { name: string; buildStart: () => void } {
 export default defineConfig({
 	plugins: [
 		lrudSpatialBuild(),
+		intlayer(),
 		tailwindcss(),
-		sveltekit(),
-		paraglideVitePlugin({ project: './project.inlang', outdir: './src/lib/paraglide' })
-	]
+		sveltekit()
+	],
+	build: {
+		chunkSizeWarningLimit: 600
+	},
+	server: {
+		proxy: {
+			'/favicon.ico': {
+				rewrite: (path) => '/favicon.png',
+				changeOrigin: true
+			}
+		}
+	}
 });

@@ -5,6 +5,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
+	import { useIntlayer } from 'svelte-intlayer';
+	
 
 	interface BuiltinApiEntry {
 		key: string;
@@ -14,6 +16,8 @@
 		adult?: boolean;
 	}
 
+	const content = useIntlayer('settings');
+
 	let newCustomName = $state('');
 	let newCustomUrl = $state('');
 
@@ -21,6 +25,15 @@
 		key,
 		...site
 	}));
+
+	const hintLabel = $derived(String($content.apiSelectorHint));
+	const selectAllLabel = $derived(String($content.selectAll));
+	const reverseSelectLabel = $derived(String($content.reverseSelect));
+	const customApiLabel = $derived(String($content.customApi));
+	const namePlaceholder = $derived(String($content.name));
+	const apiUrlPlaceholder = $derived(String($content.apiUrl));
+	const addLabel = $derived(String($content.add));
+	const addedCountLabel = $derived(String($content.addedCount));
 
 	function isApiSelected(key: string): boolean {
 		return settingsStore.selectedApis.includes(key);
@@ -60,10 +73,10 @@
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<p class="text-sm text-muted-foreground">选择要使用的视频源，至少选择一个</p>
+		<p class="text-sm text-muted-foreground">{hintLabel}</p>
 		<div class="flex gap-2">
-			<Button variant="ghost" size="sm" onclick={selectAllApis}>全选</Button>
-			<Button variant="ghost" size="sm" onclick={reverseSelectApis}>反选</Button>
+			<Button variant="ghost" size="sm" onclick={selectAllApis}>{selectAllLabel}</Button>
+			<Button variant="ghost" size="sm" onclick={reverseSelectApis}>{reverseSelectLabel}</Button>
 		</div>
 	</div>
 	<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
@@ -98,15 +111,15 @@
 
 	<div class="space-y-3">
 		<div class="flex items-center justify-between">
-			<Label>自定义 API 源</Label>
+			<Label>{customApiLabel}</Label>
 			<span class="text-xs text-muted-foreground">
-				已添加 {settingsStore.customApis.length} 个
+				{addedCountLabel.replace('{n}', String(settingsStore.customApis.length))}
 			</span>
 		</div>
 		<div class="flex gap-2">
-			<Input placeholder="名称" bind:value={newCustomName} class="w-32" />
-			<Input placeholder="API 地址" bind:value={newCustomUrl} class="grow" />
-			<Button onclick={addCustomApi}>添加</Button>
+			<Input placeholder={namePlaceholder} bind:value={newCustomName} class="w-32" />
+			<Input placeholder={apiUrlPlaceholder} bind:value={newCustomUrl} class="grow" />
+			<Button onclick={addCustomApi}>{addLabel}</Button>
 		</div>
 		{#if settingsStore.customApis.length > 0}
 			<div class="space-y-2">

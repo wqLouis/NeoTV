@@ -1,16 +1,16 @@
 [package]
-name = "app"
+name = "neotv"
 version = "0.1.0"
-description = "A Tauri App"
+description = "NeoTV - Free open-source video streaming app"
 authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
-default-run = "app"
+default-run = "neotv"
 
 [lib]
-name = "app_lib"
+name = "neotv_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -28,3 +28,4 @@ dirs = "5.0"
 url = "2.5"
 base64 = "0.22"
 tauri-plugin-os = "2.3.2"
+webkit2gtk-nvidia-quirk = "1.3"

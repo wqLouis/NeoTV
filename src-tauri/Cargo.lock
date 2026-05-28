@@ -48,24 +48,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "app"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "dirs 5.0.1",
- "once_cell",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-os",
- "tauri-plugin-shell",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "async-compression"
 version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2150,6 +2132,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
+]
+
+[[package]]
+name = "neotv"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "dirs 5.0.1",
+ "once_cell",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-os",
+ "tauri-plugin-shell",
+ "tokio",
+ "url",
+ "webkit2gtk-nvidia-quirk",
 ]
 
 [[package]]
@@ -4908,6 +4909,12 @@ dependencies = [
  "soup3",
  "webkit2gtk-sys",
 ]
+
+[[package]]
+name = "webkit2gtk-nvidia-quirk"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fde8fe8f4986fe10ea5247f7b00dad36826e45b67cbc13dce55c13ae1368855"
 
 [[package]]
 name = "webkit2gtk-sys"

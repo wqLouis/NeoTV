@@ -9,6 +9,7 @@
 		"devUrl": "http://localhost:5173"
 	},
 	"app": {
+		"withGlobalTauri": true,
 		"windows": [
 			{
 				"title": "NeoTV",
@@ -17,7 +18,8 @@
 				"resizable": true,
 				"fullscreen": false,
 				"decorations": false,
-				"maximized": true
+				"maximized": true,
+				"devtools": true
 			}
 		],
 		"security": {

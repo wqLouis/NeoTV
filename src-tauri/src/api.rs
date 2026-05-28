@@ -56,7 +56,7 @@ pub async fn http_request(options: HttpRequestOptions) -> Result<HttpResponse, H
     let mut request_builder = client.request(method_for_reqwest.clone(), &options.url);
 
     let mut req_headers = HeaderMap::new();
-    req_headers.insert(USER_AGENT, HeaderValue::from_static("LibreTV-TauriApp/1.0"));
+    req_headers.insert(USER_AGENT, HeaderValue::from_static("NeoTV-TauriApp/1.0"));
 
     if let Some(h) = options.headers {
         for (key, value) in h {

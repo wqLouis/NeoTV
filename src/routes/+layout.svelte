@@ -1,8 +1,5 @@
 <script lang="ts">
-	import type { Pathname } from '$app/types';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import { onMount } from 'svelte';
 	import { Home, Search, History, Heart, Settings, LayoutGrid } from '@lucide/svelte';
 	import Sonner from '$lib/components/ui/sonner/sonner.svelte';
@@ -14,6 +11,10 @@
 	import { getNextFocus } from '@bbc/tv-lrud-spatial';
 	import TrafficLights from '$lib/components/TrafficLights.svelte';
 	import { platform } from '@tauri-apps/plugin-os';
+	import { isTauri } from '@tauri-apps/api/core';
+	import { useIntlayer } from 'svelte-intlayer';
+	import { setIntlayerLocale, getIntlayerLocale } from '$lib/intlayer/locale';
+	import type { Locale } from 'intlayer';
 	import './layout.css';
 
 	let { children } = $props();
@@ -21,18 +22,29 @@
 	// Show traffic lights only on Windows and Linux (not macOS)
 	let showTrafficLights = $state(false);
 
+	// Intlayer navigation content
+	const nav = useIntlayer('navigation');
+
 	onMount(async () => {
-		const os = await platform();
-		showTrafficLights = os === 'windows' || os === 'linux';
+		if (isTauri()) {
+			const os = await platform();
+			showTrafficLights = os === 'windows' || os === 'linux';
+		}
+
+		// Initialize intlayer locale from cookie/localStorage
+		const savedLocale = getIntlayerLocale();
+		setIntlayerLocale(savedLocale as Locale);
 	});
 
-	const upperNav = [{ href: '/search', label: '搜索', icon: Search }];
+	const upperNav = [
+		{ href: '/search', key: 'search' as const, icon: Search }
+	];
 	const lowerNav = [
-		{ href: '/', label: '首页', icon: Home },
-		{ href: '/browse', label: '浏览', icon: LayoutGrid },
-		{ href: '/history', label: '历史', icon: History },
-		{ href: '/favourites', label: '收藏', icon: Heart },
-		{ href: '/settings', label: '设置', icon: Settings }
+		{ href: '/', key: 'home' as const, icon: Home },
+		{ href: '/browse', key: 'browse' as const, icon: LayoutGrid },
+		{ href: '/history', key: 'history' as const, icon: History },
+		{ href: '/favourites', key: 'favourites' as const, icon: Heart },
+		{ href: '/settings', key: 'settings' as const, icon: Settings }
 	];
 
 	function isActive(href: string, pathname: string): boolean {
@@ -59,9 +71,17 @@
 		modalStore.init();
 		await modalStore.checkGstLibav();
 	});
+
+	async function switchLocale(newLocale: Locale) {
+		setIntlayerLocale(newLocale);
+		window.location.reload();
+	}
 </script>
 
-<svelte:head><link rel="icon" type="image/png" href="/favicon.png" /></svelte:head>
+<svelte:head>
+		<link rel="icon" type="image/png" href="/favicon.png" />
+		<link rel="shortcut icon" type="image/png" href="/favicon.png" />
+	</svelte:head>
 
 {#if showTrafficLights}
 	<TrafficLights />
@@ -71,7 +91,7 @@
 	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<div class="flex flex-col items-center gap-2 py-2">
-				{#each upperNav as item, i (item.href)}
+				{#each upperNav as item (item.href)}
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
@@ -86,7 +106,7 @@
 						</div>
 						<span
 							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
-							>{item.label}</span
+							>{$nav?.content?.[item.key]?.value ?? ''}</span
 						>
 					</a>
 				{/each}
@@ -95,7 +115,7 @@
 			<div class="flex-1"></div>
 
 			<div class="flex flex-col items-center gap-2 py-2">
-				{#each lowerNav as item, i (item.href)}
+				{#each lowerNav as item (item.href)}
 					{@const active = isActive(item.href, page.url.pathname)}
 					<a
 						href={item.href}
@@ -114,7 +134,7 @@
 						</div>
 						<span
 							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
-							>{item.label}</span
+							>{$nav?.content?.[item.key]?.value ?? ''}</span
 						>
 					</a>
 				{/each}
@@ -125,12 +145,6 @@
 	<main class="ml-20 flex-1 overflow-y-auto">
 		{@render children()}
 	</main>
-</div>
-
-<div class="hidden">
-	{#each locales as locale (locale)}
-		<a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
-	{/each}
 </div>
 
 <svelte:window onkeydown={handleKeydown} />

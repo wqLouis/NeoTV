@@ -110,7 +110,7 @@ fn get_cache_dir() -> PathBuf {
     }
     let dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("libretv_cache");
+        .join("neotv_cache");
     dir
 }
 

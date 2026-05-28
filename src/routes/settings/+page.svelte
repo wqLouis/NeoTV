@@ -8,7 +8,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import { toast } from 'svelte-sonner';
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, isTauri } from '@tauri-apps/api/core';
 	import {
 		formatLatency,
 		formatSpeed,
@@ -19,6 +19,9 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import ApiSelector from '$lib/components/business/ApiSelector.svelte';
 	import ThemeSelector from '$lib/components/business/ThemeSelector.svelte';
+	import { useIntlayer } from 'svelte-intlayer';
+	import { getIntlayerLocale, setIntlayerLocale } from '$lib/intlayer/locale';
+	import type { Locale } from 'intlayer';
 
 	let cacheStats = $state<{
 		hits: number;
@@ -34,22 +37,36 @@
 	let preloaderCacheSize = $state(settingsStore.preloaderCacheSizeMB.toString());
 	let preloaderWorkerCount = $state(settingsStore.preloaderWorkerCount.toString());
 
+	const content = useIntlayer('settings');
+	let currentLocale = $state<Locale>(getIntlayerLocale());
+
+	function handleLocaleChange(e: Event) {
+		const select = e.target as HTMLSelectElement;
+		const locale = select.value as Locale;
+		currentLocale = locale;
+		setIntlayerLocale(locale);
+		window.location.reload();
+	}
+
 	function handleCacheSizeChange(v: string) {
 		preloaderCacheSize = v;
 		const size = parseInt(v, 10);
 		settingsStore.setPreloaderCacheSizeMB(size);
-		invoke('preloader_set_max_cache_size', { bytes: size * 1024 * 1024 });
+		if (!isTauri()) return;
+			invoke('preloader_set_max_cache_size', { bytes: size * 1024 * 1024 });
 	}
 
 	function handleWorkerCountChange(v: string) {
 		preloaderWorkerCount = v;
 		const count = parseInt(v, 10);
 		settingsStore.setPreloaderWorkerCount(count);
-		invoke('preloader_set_workers', { count });
+		if (!isTauri()) return;
+			invoke('preloader_set_workers', { count });
 	}
 
 	async function loadCacheStats() {
 		try {
+			if (!isTauri()) { cacheStats = null; return; }
 			cacheStats = await invoke('cache_stats');
 		} catch {
 			cacheStats = null;
@@ -64,6 +81,7 @@
 
 	async function clearCache() {
 		try {
+			if (!isTauri()) return;
 			await invoke('cache_clear');
 			toast.success('缓存已清除');
 			loadCacheStats();
@@ -74,6 +92,7 @@
 
 	async function clearSpeedCache() {
 		try {
+			if (!isTauri()) return;
 			await invoke('speed_cache_clear_all');
 			toast.success('速度缓存已清除');
 		} catch {
@@ -85,6 +104,7 @@
 	let isTestingSpeed = $state(false);
 
 	async function testSingleSource(sourceId: string, customUrl?: string): Promise<SpeedTestResult> {
+		if (!isTauri()) return { source_id: sourceId, source_name: sourceId, latency_ms: 0, download_speed_kbps: 0, status: 'error', network_id: '', error: 'Not in Tauri' };
 		return await invoke<SpeedTestResult>('test_source_speed', {
 			sourceId,
 			customUrl
@@ -216,7 +236,7 @@
 </script>
 
 <div class="container mx-auto h-full px-4 py-6">
-	<PageHeader title="设置">
+	<PageHeader title={String($content.title.value)}>
 		{#snippet actions()}
 			<Button variant="outline" size="sm" onclick={exportConfig}>导出</Button>
 			<Button variant="outline" size="sm" onclick={triggerImport}>导入</Button>
@@ -328,6 +348,25 @@
 						点击"开始测速"检测所有已选源的速度和延迟
 					</p>
 				{/if}
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardHeader>
+				<CardTitle>{String($content.language.value)}</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<div class="flex items-center justify-between">
+					<Label>{String($content.language.value)}</Label>
+					<select
+						class="rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						value={currentLocale}
+						onchange={handleLocaleChange}
+					>
+						<option value="en">{String($content.english.value)}</option>
+						<option value="zh-Hans">{String($content.chinese.value)}</option>
+					</select>
+				</div>
 			</CardContent>
 		</Card>
 

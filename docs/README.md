@@ -1,4 +1,4 @@
-# LibreTV
+# NeoTV
 
 A modern video streaming application for desktop and TV devices with TV remote navigation support.
 
@@ -67,7 +67,7 @@ TV navigation is enabled by default. Use arrow keys to navigate:
 ## Project Structure
 
 ```
-LibreTV/
+NeoTV/
 ├── src/                      # Frontend (SvelteKit)
 │   ├── lib/
 │   │   ├── api/             # API clients

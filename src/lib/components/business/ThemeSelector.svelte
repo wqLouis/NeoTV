@@ -2,6 +2,8 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { GridDensity } from '$lib/stores/settings.svelte';
+	import { useIntlayer } from 'svelte-intlayer';
+	
 
 	interface Props {
 		class?: string;
@@ -9,17 +11,21 @@
 
 	let { class: className = '' }: Props = $props();
 
-	const themes = [
-		{ value: 'light' as const, label: '浅色' },
-		{ value: 'dark' as const, label: '深色' },
-		{ value: 'system' as const, label: '跟随系统' }
-	];
+	const content = useIntlayer('settings');
 
-	const densities: { value: GridDensity; label: string; cols: string }[] = [
-		{ value: 'compact', label: '紧凑', cols: '8列' },
-		{ value: 'standard', label: '标准', cols: '6列' },
-		{ value: 'loose', label: '宽松', cols: '5列' }
-	];
+	const themes = $derived([
+		{ value: 'light' as const, label: String($content.light) },
+		{ value: 'dark' as const, label: String($content.dark) },
+		{ value: 'system' as const, label: String($content.system) }
+	]);
+
+	const densities = $derived([
+		{ value: 'compact' as GridDensity, label: String($content.compact), cols: '8' },
+		{ value: 'standard' as GridDensity, label: String($content.standard), cols: '6' },
+		{ value: 'loose' as GridDensity, label: String($content.loose), cols: '5' }
+	]);
+
+	const gridDensityLabel = $derived(String($content.gridDensity));
 </script>
 
 <div class="space-y-4 {className}">
@@ -66,7 +72,7 @@
 	</div>
 
 	<div>
-		<div class="mb-3 text-sm font-medium">每行显示数量</div>
+		<div class="mb-3 text-sm font-medium">{gridDensityLabel}</div>
 		<div class="flex gap-2">
 			{#each densities as density}
 				<button

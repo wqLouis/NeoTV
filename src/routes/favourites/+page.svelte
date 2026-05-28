@@ -9,11 +9,20 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import EmptyState from '$lib/components/business/EmptyState.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
+	import { useIntlayer } from 'svelte-intlayer';
+	
+
+	const content = useIntlayer('common');
 
 	let selectedVideo: DoubanSubject | null = $state(null);
 	let showSourceOverlay = $state(false);
 	let selectedCardRect: DOMRect | null = $state(null);
 	let selectedItem: FavouriteItem | null = $state(null);
+
+	const titleLabel = $derived(String($content.favouritesTitle.value));
+	const noFavouritesLabel = $derived(String($content.noFavourites.value));
+	const hintLabel = $derived(String($content.addFavouritesHint.value));
+	const clearAllLabel = $derived(String($content.clearHistory.value));
 
 	function favouriteToSubject(item: FavouriteItem): DoubanSubject {
 		return {
@@ -53,19 +62,19 @@
 </script>
 
 <div class="container mx-auto h-full px-4 py-6">
-	<PageHeader title="我的收藏">
+	<PageHeader title={titleLabel}>
 		{#snippet actions()}
 			{#if favouritesStore.items.length > 0}
 				<Button variant="outline" size="sm" onclick={handleClearAll}>
 					<Trash2 class="mr-1 h-4 w-4" />
-					清空全部
+					{clearAllLabel}
 				</Button>
 			{/if}
 		{/snippet}
 	</PageHeader>
 
 	{#if favouritesStore.items.length === 0}
-		<EmptyState icon={Heart} message="暂无收藏内容" description="在播放器中点击收藏按钮添加内容" />
+		<EmptyState icon={Heart} message={noFavouritesLabel} description={hintLabel} />
 	{:else}
 		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each favouritesStore.items as item (item.id + item.source + item.episode)}

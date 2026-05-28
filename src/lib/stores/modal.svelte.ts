@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 export interface ModalInfo {
 	title: string;
@@ -43,6 +43,7 @@ export async function checkGstLibavStatus(): Promise<void> {
 	if (!browser) return;
 
 	try {
+		if (!isTauri()) return;
 		const info = await invoke<GstLibavInfo>('get_gst_libav_status');
 		if (!info.installed) {
 			showModalDialog({
@@ -60,6 +61,7 @@ export function initModalListener() {
 	if (!browser) return;
 
 	import('@tauri-apps/api/event').then(({ listen }) => {
+		if (!isTauri()) return;
 		listen<{ title: string; content: string }>('show-modal', (event) => {
 			console.log('[ModalStore] Received show-modal event:', event.payload);
 			showModalDialog({

@@ -7,6 +7,14 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import EmptyState from '$lib/components/business/EmptyState.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
+	import { useIntlayer } from 'svelte-intlayer';
+	
+
+	const content = useIntlayer('common');
+
+	const titleLabel = $derived(String($content.historyTitle.value));
+	const noHistoryLabel = $derived(String($content.noHistory.value));
+	const clearAllLabel = $derived(String($content.clearHistory.value));
 
 	function handlePlay(item: HistoryItem) {
 		const params = new URLSearchParams({
@@ -31,19 +39,19 @@
 </script>
 
 <div class="container mx-auto h-full px-4 py-6">
-	<PageHeader title="历史记录">
+	<PageHeader title={titleLabel}>
 		{#snippet actions()}
 			{#if historyStore.items.length > 0}
 				<Button variant="outline" size="sm" onclick={handleClearAll}>
 					<Trash2 class="mr-1 h-4 w-4" />
-					清空全部
+					{clearAllLabel}
 				</Button>
 			{/if}
 		{/snippet}
 	</PageHeader>
 
 	{#if historyStore.items.length === 0}
-		<EmptyState icon={Clock} message="暂无观看历史" />
+		<EmptyState icon={Clock} message={noHistoryLabel} />
 	{:else}
 		<div class="grid {GRID_DENSITY_CLASSES[settingsStore.gridDensity]} gap-4">
 			{#each historyStore.items as item (item.id + item.source + item.episode)}

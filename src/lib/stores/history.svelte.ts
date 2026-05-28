@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 export interface HistoryItem {
 	id: string;
@@ -15,6 +15,7 @@ function createHistoryStore() {
 
 	async function loadHistory() {
 		try {
+			if (!isTauri()) return;
 			history = await invoke<HistoryItem[]>('history_get_all');
 		} catch (e) {
 			console.error('[History] Failed to load from Rust:', e);
@@ -34,6 +35,7 @@ function createHistoryStore() {
 		},
 		async add(item: HistoryItem) {
 			try {
+				if (!isTauri()) return;
 				await invoke('history_add', { item });
 				const existingIdx = history.findIndex(
 					(h) => h.id === item.id && h.source === item.source && h.episode === item.episode
@@ -49,6 +51,7 @@ function createHistoryStore() {
 		},
 		async remove(id: string, source: string, episode?: string) {
 			try {
+				if (!isTauri()) return;
 				await invoke('history_remove', { id, source, episode: episode ?? null });
 				history = history.filter(
 					(h) => !(h.id === id && h.source === source && h.episode === episode)
@@ -59,6 +62,7 @@ function createHistoryStore() {
 		},
 		async clear() {
 			try {
+				if (!isTauri()) return;
 				await invoke('history_clear');
 				history = [];
 			} catch (e) {

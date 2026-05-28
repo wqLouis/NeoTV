@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, isTauri } from '@tauri-apps/api/core';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-	import Hls from 'hls.js';
-	import PlayerControls from './PlayerControls.svelte';
+		import PlayerControls from './PlayerControls.svelte';
 	import PlayerSettingsPopup from './PlayerSettingsPopup.svelte';
 
 	interface Episode {
@@ -57,7 +56,7 @@
 
 	let videoEl: HTMLVideoElement;
 	let containerEl: HTMLDivElement;
-	let hls: Hls | null = null;
+	let hls: any = null;
 
 	let playing = $state(false);
 	let currentTime = $state(0);
@@ -263,6 +262,7 @@
 
 	async function updateCacheStats() {
 		try {
+			if (!isTauri()) return;
 			const [count, bytes] = await invoke<[number, number]>('preloader_stats');
 			cacheStats = { count, bytes };
 		} catch (e) {
@@ -272,6 +272,7 @@
 
 	async function setWorkerCount(count: number) {
 		try {
+			if (!isTauri()) return;
 			await invoke('preloader_set_workers', { count });
 			workerCount = count;
 			console.log(`[Debug] Worker count set to ${count}`);
@@ -282,6 +283,7 @@
 
 	async function stopPreloader() {
 		try {
+			if (!isTauri()) return;
 			await invoke('preloader_stop');
 			cacheStats = null;
 			console.log('[Debug] Preloader stopped');
@@ -349,30 +351,16 @@
 					type === 'subtitle'
 				) {
 					console.log('[RustLoader] Fetching m3u8:', url);
-					invoke<string>('fetch_hls_m3u8', { url })
-						.then((content) => {
-							if (this.loaderInstanceId !== currentInstanceId) {
-								console.log('[RustLoader] Discarding stale m3u8 response');
-								return;
-							}
-							this.stats.loading.end = performance.now();
-							this.stats.loaded = content.length;
-							this.stats.total = content.length;
-							callbacks.onSuccess(
-								{ code: 200, data: content, url: url as string },
-								this.stats,
-								context,
-								null
-							);
-						})
-						.catch((e) => {
-							if (this.loaderInstanceId !== currentInstanceId) {
-								return;
-							}
-							callbacks.onError({ code: 500, text: String(e) }, context, null, this.stats);
-						});
+					if (!isTauri()) {
+						callbacks.onError({ code: 500, text: 'Not in Tauri' }, context, null, this.stats);
+						return;
+					}
 				} else {
 					console.log('[RustLoader] Fetching segment:', url);
+					if (!isTauri()) {
+						callbacks.onError({ code: 500, text: 'Not in Tauri' }, context, null, this.stats);
+						return;
+					}
 					invoke<number[]>('fetch_hls_segment', { url })
 						.then((data) => {
 							if (this.loaderInstanceId !== currentInstanceId) {
@@ -424,6 +412,8 @@
 			return;
 		}
 
+		const { default: Hls } = await import('hls.js');
+
 		if (Hls.isSupported()) {
 			console.log('[HLS] Hls.isSupported() = true, creating custom loader');
 
@@ -446,11 +436,11 @@
 				backBufferLength: 120
 			});
 
-			hls.on(Hls.Events.ERROR, (_, data) => {
+			hls.on('hlsEvents.ERROR', (_: any, data: any) => {
 				console.error('[HLS] Error:', data);
 				if (data.fatal && hls) {
 					switch (data.type) {
-						case Hls.ErrorTypes.NETWORK_ERROR:
+						case 'hlsErrorTypes.NETWORK_ERROR':
 							console.error('[HLS] Network error');
 							networkErrorRetryCount++;
 							if (networkErrorRetryCount <= MAX_NETWORK_ERROR_RETRIES) {
@@ -464,8 +454,8 @@
 							hls = null;
 							error = '网络连接失败，请检查网络';
 							return;
-						case Hls.ErrorTypes.MEDIA_ERROR:
-							if (data.details === Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR) {
+						case 'hlsErrorTypes.MEDIA_ERROR':
+							if (data.details === 'hlsErrorDetails.BUFFER_ADD_CODEC_ERROR') {
 								mediaErrorRecoveryCount++;
 								if (mediaErrorRecoveryCount <= MAX_MEDIA_ERROR_RECOVERIES) {
 									console.warn(
@@ -480,7 +470,7 @@
 								}
 								return;
 							}
-							if (data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR) {
+							if (data.details === 'hlsErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR') {
 								mediaErrorRecoveryCount++;
 								if (mediaErrorRecoveryCount <= MAX_MEDIA_ERROR_RECOVERIES) {
 									console.warn(
@@ -495,7 +485,7 @@
 								}
 								return;
 							}
-							if (data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR) {
+							if (data.details === 'hlsErrorDetails.BUFFER_APPEND_ERROR') {
 								mediaErrorRecoveryCount++;
 								console.warn(
 									`[HLS] Buffer append error, count ${mediaErrorRecoveryCount}/${MAX_MEDIA_ERROR_RECOVERIES}`
@@ -524,7 +514,7 @@
 			console.log('[HLS] Loading source via Rust loader:', src);
 			hls.loadSource(src);
 			hls.attachMedia(videoEl);
-			hls.on(Hls.Events.MANIFEST_PARSED, () => {
+			hls.on('hlsEvents.MANIFEST_PARSED', () => {
 				console.log('[HLS] MANIFEST_PARSED event fired');
 				loading = false;
 				if (autoplay) {
@@ -541,6 +531,7 @@
 	onMount(() => {
 		console.log('[HLS] onMount called:', { type, src, hasVideoEl: !!videoEl });
 
+		if (!isTauri()) return;
 		invoke('preloader_set_max_cache_size', {
 			bytes: settingsStore.preloaderCacheSizeMB * 1024 * 1024
 		});
@@ -567,7 +558,8 @@
 		if (hls) {
 			hls.destroy();
 		}
-		await invoke('preloader_stop');
+		if (!isTauri()) return;
+			await invoke('preloader_stop');
 	});
 
 	function handleTimeUpdate() {

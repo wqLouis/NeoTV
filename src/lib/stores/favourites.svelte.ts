@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 export interface FavouriteItem {
 	id: string;
@@ -16,6 +16,7 @@ function createFavouritesStore() {
 
 	async function loadFavourites() {
 		try {
+			if (!isTauri()) return;
 			const items = await invoke<any[]>('favourites_get_all');
 			// Convert snake_case from Rust to camelCase for frontend
 			favourites = items.map((item) => ({
@@ -56,6 +57,7 @@ function createFavouritesStore() {
 					episode_index: item.episodeIndex ?? null,
 					added_at: Date.now()
 				};
+				if (!isTauri()) return;
 				await invoke('favourites_add', { item: rustItem });
 				// Update local state
 				const newItem: FavouriteItem = { ...item, addedAt: rustItem.added_at };
@@ -66,6 +68,7 @@ function createFavouritesStore() {
 		},
 		async remove(id: string, source: string, episode?: string) {
 			try {
+				if (!isTauri()) return;
 				await invoke('favourites_remove', { id, source, episode: episode ?? null });
 				favourites = favourites.filter(
 					(f) => !(f.id === id && f.source === source && f.episode === episode)
@@ -79,6 +82,7 @@ function createFavouritesStore() {
 		},
 		async clear() {
 			try {
+				if (!isTauri()) return;
 				await invoke('favourites_clear');
 				favourites = [];
 			} catch (e) {

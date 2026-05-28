@@ -121,8 +121,8 @@ export const YELLOW_FILTER_BANNED = [
 ];
 
 export const SITE_CONFIG = {
-	name: 'LibreTV',
-	url: 'https://libretv.is-an.org',
+	name: 'NeoTV',
+	url: 'https://neotv.is-an.org',
 	description: '免费在线视频搜索与观看平台',
 	logo: './image/retrotv_5520.png',
 	version: '1.0.3'

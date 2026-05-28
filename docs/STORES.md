@@ -1,6 +1,6 @@
 # Svelte Stores
 
-LibreTV uses Svelte 5's `$state` runes for reactive state management. Settings and search history persist to `localStorage`; history and favourites persist via the Rust backend to JSON files.
+NeoTV uses Svelte 5's `$state` runes for reactive state management. Settings and search history persist to `localStorage`; history and favourites persist via the Rust backend to JSON files.
 
 ## Store Index
 

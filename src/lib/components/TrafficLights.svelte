@@ -1,58 +1,50 @@
 <script lang="ts">
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, isTauri } from '@tauri-apps/api/core';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { X, Minus, Maximize2, Minimize2 } from '@lucide/svelte';
 
 	let isMaximized = $state(false);
 
 	async function checkMaximized() {
+		if (!isTauri()) return;
 		try {
 			isMaximized = await invoke<boolean>('window_is_maximized');
 		} catch {
-			isMaximized = await getCurrentWindow().isMaximized();
+			isMaximized = false;
 		}
 	}
 
 	async function handleMinimize() {
+		if (!isTauri()) return;
 		try {
 			await invoke('window_minimize');
-		} catch {
-			await getCurrentWindow().minimize();
-		}
+		} catch {}
 	}
 
 	async function handleMaximize() {
+		if (!isTauri()) return;
 		try {
 			await invoke('window_maximize');
-		} catch {
-			const win = getCurrentWindow();
-			if (await win.isMaximized()) {
-				await win.unmaximize();
-			} else {
-				await win.maximize();
-			}
-		}
+		} catch {}
 		isMaximized = !isMaximized;
 	}
 
 	async function handleClose() {
+		if (!isTauri()) return;
 		try {
 			await invoke('window_close');
-		} catch {
-			await getCurrentWindow().close();
-		}
+		} catch {}
 	}
 
 	async function startDrag(e: MouseEvent) {
 		if ((e.target as HTMLElement).closest('.traffic-btn')) return;
+		if (!isTauri()) return;
 		try {
 			await getCurrentWindow().startDragging();
-		} catch {
-			// Fallback
-		}
+		} catch {}
 	}
 
-	getCurrentWindow().onResized(() => {
+	if (isTauri()) getCurrentWindow().onResized(() => {
 		checkMaximized();
 	});
 
@@ -64,7 +56,9 @@
 <div
 	class="group fixed top-2 left-4 z-[9999] flex cursor-grab items-center gap-2 rounded-2xl border bg-background/80 px-3 py-2 backdrop-blur-md opacity-0 transition-opacity duration-300 hover:opacity-100 select-none"
 	onmousedown={startDrag}
-	role="banner"
+	role="toolbar"
+	tabindex="0"
+	aria-label="窗口控制"
 >
 	<button
 		class="traffic-btn group flex size-4 items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:bg-[#ff5f57]/80 active:scale-90"

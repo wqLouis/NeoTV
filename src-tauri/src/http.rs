@@ -57,7 +57,7 @@ pub async fn fetch_bytes_with_content_type(url: &str, referer: Option<&str>) -> 
         .unwrap_or_default();
 
     let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, HeaderValue::from_static("LibreTV/1.0"));
+    headers.insert(USER_AGENT, HeaderValue::from_static("NeoTV/1.0"));
     headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
     headers.insert(REFERER, HeaderValue::from_str(&referer_url).unwrap_or_else(|_| HeaderValue::from_static("*")));
 

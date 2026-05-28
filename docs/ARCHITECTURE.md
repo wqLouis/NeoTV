@@ -1,4 +1,4 @@
-# LibreTV / NeoTV Architecture
+# NeoTV Architecture
 
 ## Overview
 
@@ -22,7 +22,7 @@ A modern video streaming application built with **Tauri 2.x** (Rust backend) and
 ## Project Structure
 
 ```
-LibreTV/
+NeoTV/
 ├── src/                              # Frontend (SvelteKit)
 │   ├── lib/
 │   │   ├── api/                     # API clients

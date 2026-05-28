@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, isTauri } from '@tauri-apps/api/core';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { historyStore } from '$lib/stores/history.svelte';
 	import { parsePlayUrl, getVideoDetail, type VideoDetail } from '$lib/api/search';
@@ -57,6 +57,7 @@
 		}
 
 		try {
+			if (!isTauri()) return { type: 'hls', url: urlClean };
 			const result = await invoke<{
 				url: string;
 				content_type: string;
@@ -220,12 +221,14 @@
 			}
 		}
 
-		unlistenBackButton = await listen('navigate', () => {
-			if (playerSrc && !showSourceOverlay) {
-				playerSrc = '';
-				showSourceOverlay = true;
-			}
-		});
+		if (isTauri()) {
+			unlistenBackButton = await listen('navigate', () => {
+				if (playerSrc && !showSourceOverlay) {
+					playerSrc = '';
+					showSourceOverlay = true;
+				}
+			});
+		}
 
 		window.addEventListener('popstate', handleBackNavigation);
 

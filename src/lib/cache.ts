@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 const MAX_CACHE_SIZE = 500;
 const imageCache = new Map<string, string>();
@@ -27,6 +27,7 @@ export async function fetchImage(url: string, referer?: string): Promise<string>
 	const requestPromise = (async () => {
 		try {
 			evictOldest();
+			if (!isTauri()) return url;
 			const dataUrl: string = await invoke('fetch_url', { url, referer });
 			imageCache.set(url, dataUrl);
 			return dataUrl;
