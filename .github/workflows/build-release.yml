@@ -5,6 +5,7 @@ on:
     branches: [main]
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -89,6 +90,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      msi_path: ${{ steps.find-outputs.outputs.MSI_PATH }}
 
     steps:
       - name: Checkout
@@ -110,8 +113,8 @@ jobs:
         id: find-outputs
         shell: pwsh
         run: |
-          $exe = Get-ChildItem ./src-tauri/target -Filter "*.exe" -Recurse -File -EA SilentlyContinue | Where-Object { $_.FullName -notmatch "WebView2" -and $_.FullName -notmatch "setup" } | Select-Object -First 1 -ExpandProperty FullName
-          $msi = Get-ChildItem ./src-tauri/target -Filter "*.msi" -Recurse -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          $exe = Get-ChildItem ./src-tauri/target/release -Filter "*.exe" -File -EA SilentlyContinue | Where-Object { $_.FullName -notmatch "WebView2" -and $_.FullName -notmatch "setup" } | Select-Object -First 1 -ExpandProperty FullName
+          $msi = Get-ChildItem ./src-tauri/target/release -Filter "*.msi" -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           echo "EXE_PATH=$exe"
           echo "MSI_PATH=$msi"
           echo "EXE_PATH=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -149,6 +152,7 @@ jobs:
           name: NeoTV-win-exe
 
       - name: Download Windows MSI
+        if: needs.build-windows.outputs.msi_path != ''
         uses: actions/download-artifact@v4
         with:
           name: NeoTV-win-msi

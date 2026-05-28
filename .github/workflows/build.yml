@@ -155,17 +155,24 @@ jobs:
       #
       - name: Sign Windows executable
         if: >
-          (vars.WIN_SIGN_ENABLED == 'true' || github.event.inputs.sign_windows == 'true') &&
-          secrets.WIN_CERT_BASE64 != '' &&
-          secrets.WIN_CERT_PASS != ''
+          vars.WIN_SIGN_ENABLED == 'true' || github.event.inputs.sign_windows == 'true'
+        env:
+          WIN_CERT_BASE64: ${{ secrets.WIN_CERT_BASE64 }}
+          WIN_CERT_PASS: ${{ secrets.WIN_CERT_PASS }}
         run: |
+          # Check if certificates are available
+          if [ -z "$WIN_CERT_BASE64" ] || [ -z "$WIN_CERT_PASS" ]; then
+            echo "⚠️ Skipping signing: certificates not configured"
+            exit 0
+          fi
+
           # Decode certificate
-          echo "${{ secrets.WIN_CERT_BASE64 }}" | base64 -d > /tmp/signing_cert.pfx
+          echo "$WIN_CERT_BASE64" | base64 -d > /tmp/signing_cert.pfx
 
           # Sign with osslsigncode (PKCS#12, SHA-256, RFC 3161 timestamp)
           osslsigncode sign \
             -pkcs12 /tmp/signing_cert.pfx \
-            -pass "${{ secrets.WIN_CERT_PASS }}" \
+            -pass "$WIN_CERT_PASS" \
             -h sha256 \
             -t http://timestamp.digicert.com \
             -in dist-windows/neotv.exe \

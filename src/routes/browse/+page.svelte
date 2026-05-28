@@ -43,8 +43,8 @@
 
 	// ── TV navigation state ──────────────────────────────────────────
 	let focusedIndex = $state(0);
-	// We'll bind card elements by index using a callback pattern
-	let cardEls: HTMLElement[] = [];
+	// Track if we're currently scrolling to prevent focus conflicts
+	let isScrolling = $state(false);
 
 	const PAGE_SIZE = 20;
 	const TV_TAGS_FALLBACK = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧'];
@@ -66,7 +66,7 @@
 			return { start: 0, end: Math.min(charts.length, columns * 4) };
 		}
 
-		const bufferRows = settingsStore.tvNavModeEnabled ? 4 : 2;
+		const bufferRows = settingsStore.tvNavModeEnabled ? 6 : 2;
 		const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - bufferRows);
 		const endRow = Math.min(
 			totalRows - 1,
@@ -297,7 +297,8 @@
 
 	function focusCard(index: number) {
 		focusedIndex = index;
-		const el = cardEls[index];
+		// Find the actual DOM element for this index in the current visible items
+		const el = document.querySelector(`[data-card-index="${index}"]`) as HTMLElement | null;
 		if (el) {
 			el.focus({ preventScroll: true });
 		}
@@ -311,17 +312,36 @@
 		const viewTop = scrollTop;
 		const viewBottom = scrollTop + containerHeight;
 
+		const needsScroll = targetTop < viewTop || targetBottom > viewBottom;
+		let scrollTarget = 0;
+
 		if (targetTop < viewTop) {
-			scrollContainer?.scrollTo({ top: targetTop - rowHeight, behavior: 'smooth' });
-			await tick();
-			await new Promise((r) => requestAnimationFrame(r));
+			scrollTarget = targetTop - rowHeight;
 		} else if (targetBottom > viewBottom) {
-			scrollContainer?.scrollTo({ top: targetBottom - containerHeight + rowHeight, behavior: 'smooth' });
-			await tick();
-			await new Promise((r) => requestAnimationFrame(r));
+			scrollTarget = targetBottom - containerHeight + rowHeight;
 		}
 
-		const el = cardEls[index];
+		if (needsScroll) {
+			isScrolling = true;
+			scrollContainer?.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+			// Wait for scroll + re-render (increase timeout for smoother experience)
+			await tick();
+			await new Promise((r) => setTimeout(r, 400));
+			isScrolling = false;
+		}
+
+		// Find the element by data attribute (more reliable than array index)
+		let el = document.querySelector(`[data-card-index="${index}"]`) as HTMLElement | null;
+		
+		// Retry a few times if element not found (DOM might need more time to update)
+		if (!el) {
+			for (let retry = 0; retry < 3; retry++) {
+				await new Promise((r) => setTimeout(r, 100));
+				el = document.querySelector(`[data-card-index="${index}"]`) as HTMLElement | null;
+				if (el) break;
+			}
+		}
+		
 		if (el) {
 			el.focus({ preventScroll: true });
 		}
@@ -386,19 +406,21 @@
 				onscroll={handleScroll}
 				onkeydown={handleContainerKeydown}
 				class="relative w-full flex-1 overflow-y-auto py-12"
+				role="grid"
+				tabindex="0"
 			>
 				<div class="isolation-isolate relative min-h-full w-full px-8 pt-4">
 					{#each visibleItems as { item, top, left, width, height, index } (item.id)}
 						<div
 							class="absolute z-0 overflow-hidden rounded-lg"
 							class:focused={index === focusedIndex}
+							data-card-index={index}
 							style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
 							role="button"
 							tabindex="-1"
-							bind:this={(el) => { if (el) cardEls[index] = el; }}
 							onclick={(e) => handleVideoClick(item, e)}
 							onkeydown={(e) => handleCardActivate(item, e)}
-							onfocus={() => { focusedIndex = index; }}
+							onfocus={() => { if (!isScrolling) focusedIndex = index; }}
 						>
 							<DoubanCard {item} fluid={true} onclick={handleVideoClick} />
 						</div>
