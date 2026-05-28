@@ -5,8 +5,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
-	import { useIntlayer } from 'svelte-intlayer';
-	
 
 	interface BuiltinApiEntry {
 		key: string;
@@ -16,8 +14,6 @@
 		adult?: boolean;
 	}
 
-	const content = useIntlayer('settings');
-
 	let newCustomName = $state('');
 	let newCustomUrl = $state('');
 
@@ -26,14 +22,14 @@
 		...site
 	}));
 
-	const hintLabel = $derived(String($content.apiSelectorHint));
-	const selectAllLabel = $derived(String($content.selectAll));
-	const reverseSelectLabel = $derived(String($content.reverseSelect));
-	const customApiLabel = $derived(String($content.customApi));
-	const namePlaceholder = $derived(String($content.name));
-	const apiUrlPlaceholder = $derived(String($content.apiUrl));
-	const addLabel = $derived(String($content.add));
-	const addedCountLabel = $derived(String($content.addedCount));
+	const hintLabel = '选择要使用的视频源，至少选择一个';
+	const selectAllLabel = '全选';
+	const reverseSelectLabel = '反选';
+	const customApiLabel = '自定义 API 源';
+	const namePlaceholder = '名称';
+	const apiUrlPlaceholder = 'API 地址';
+	const addLabel = '添加';
+	const addedCountLabel = (n: number) => `已添加 ${n} 个`;
 
 	function isApiSelected(key: string): boolean {
 		return settingsStore.selectedApis.includes(key);
@@ -113,7 +109,7 @@
 		<div class="flex items-center justify-between">
 			<Label>{customApiLabel}</Label>
 			<span class="text-xs text-muted-foreground">
-				{addedCountLabel.replace('{n}', String(settingsStore.customApis.length))}
+				{addedCountLabel(settingsStore.customApis.length)}
 			</span>
 		</div>
 		<div class="flex gap-2">

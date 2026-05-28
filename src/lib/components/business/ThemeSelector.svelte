@@ -2,8 +2,6 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { GridDensity } from '$lib/stores/settings.svelte';
-	import { useIntlayer } from 'svelte-intlayer';
-	
 
 	interface Props {
 		class?: string;
@@ -11,21 +9,19 @@
 
 	let { class: className = '' }: Props = $props();
 
-	const content = useIntlayer('settings');
-
 	const themes = $derived([
-		{ value: 'light' as const, label: String($content.light) },
-		{ value: 'dark' as const, label: String($content.dark) },
-		{ value: 'system' as const, label: String($content.system) }
+		{ value: 'light' as const, label: '浅色' },
+		{ value: 'dark' as const, label: '深色' },
+		{ value: 'system' as const, label: '跟随系统' }
 	]);
 
 	const densities = $derived([
-		{ value: 'compact' as GridDensity, label: String($content.compact), cols: '8' },
-		{ value: 'standard' as GridDensity, label: String($content.standard), cols: '6' },
-		{ value: 'loose' as GridDensity, label: String($content.loose), cols: '5' }
+		{ value: 'compact' as GridDensity, label: '紧凑', cols: '8' },
+		{ value: 'standard' as GridDensity, label: '标准', cols: '6' },
+		{ value: 'loose' as GridDensity, label: '宽松', cols: '5' }
 	]);
 
-	const gridDensityLabel = $derived(String($content.gridDensity));
+	const gridDensityLabel = '每行显示数量';
 </script>
 
 <div class="space-y-4 {className}">

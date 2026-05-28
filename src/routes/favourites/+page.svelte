@@ -9,20 +9,16 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import EmptyState from '$lib/components/business/EmptyState.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
-	import { useIntlayer } from 'svelte-intlayer';
-	
-
-	const content = useIntlayer('common');
 
 	let selectedVideo: DoubanSubject | null = $state(null);
 	let showSourceOverlay = $state(false);
 	let selectedCardRect: DOMRect | null = $state(null);
 	let selectedItem: FavouriteItem | null = $state(null);
 
-	const titleLabel = $derived(String($content.favouritesTitle.value));
-	const noFavouritesLabel = $derived(String($content.noFavourites.value));
-	const hintLabel = $derived(String($content.addFavouritesHint.value));
-	const clearAllLabel = $derived(String($content.clearHistory.value));
+	const titleLabel = '收藏';
+	const noFavouritesLabel = '暂无收藏的视频';
+	const hintLabel = '浏览并添加视频到收藏夹';
+	const clearAllLabel = '清空';
 
 	function favouriteToSubject(item: FavouriteItem): DoubanSubject {
 		return {

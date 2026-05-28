@@ -13,6 +13,13 @@
 
 		if (focused === currentFocus) return;
 
+		// Skip elements inside scrollable containers (like browse page grid)
+		const scrollContainer = focused.closest('.overflow-y-auto');
+		if (scrollContainer) {
+			currentFocus = null;
+			return;
+		}
+
 		const isFocusable =
 			focused.matches('[tabindex], a, button, input') ||
 			focused.closest('[tabindex], a, button, input');

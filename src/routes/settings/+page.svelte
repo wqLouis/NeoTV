@@ -19,9 +19,6 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import ApiSelector from '$lib/components/business/ApiSelector.svelte';
 	import ThemeSelector from '$lib/components/business/ThemeSelector.svelte';
-	import { useIntlayer } from 'svelte-intlayer';
-	import { getIntlayerLocale, setIntlayerLocale } from '$lib/intlayer/locale';
-	import type { Locale } from 'intlayer';
 
 	let cacheStats = $state<{
 		hits: number;
@@ -36,17 +33,6 @@
 
 	let preloaderCacheSize = $state(settingsStore.preloaderCacheSizeMB.toString());
 	let preloaderWorkerCount = $state(settingsStore.preloaderWorkerCount.toString());
-
-	const content = useIntlayer('settings');
-	let currentLocale = $state<Locale>(getIntlayerLocale());
-
-	function handleLocaleChange(e: Event) {
-		const select = e.target as HTMLSelectElement;
-		const locale = select.value as Locale;
-		currentLocale = locale;
-		setIntlayerLocale(locale);
-		window.location.reload();
-	}
 
 	function handleCacheSizeChange(v: string) {
 		preloaderCacheSize = v;
@@ -236,7 +222,7 @@
 </script>
 
 <div class="container mx-auto h-full px-4 py-6">
-	<PageHeader title={String($content.title.value)}>
+	<PageHeader title="设置">
 		{#snippet actions()}
 			<Button variant="outline" size="sm" onclick={exportConfig}>导出</Button>
 			<Button variant="outline" size="sm" onclick={triggerImport}>导入</Button>
@@ -348,25 +334,6 @@
 						点击"开始测速"检测所有已选源的速度和延迟
 					</p>
 				{/if}
-			</CardContent>
-		</Card>
-
-		<Card>
-			<CardHeader>
-				<CardTitle>{String($content.language.value)}</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<div class="flex items-center justify-between">
-					<Label>{String($content.language.value)}</Label>
-					<select
-						class="rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						value={currentLocale}
-						onchange={handleLocaleChange}
-					>
-						<option value="en">{String($content.english.value)}</option>
-						<option value="zh-Hans">{String($content.chinese.value)}</option>
-					</select>
-				</div>
 			</CardContent>
 		</Card>
 

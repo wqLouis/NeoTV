@@ -1,4 +1,3 @@
-import { intlayer } from 'vite-intlayer';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -25,7 +24,6 @@ function lrudSpatialBuild(): { name: string; buildStart: () => void } {
 export default defineConfig({
 	plugins: [
 		lrudSpatialBuild(),
-		intlayer(),
 		tailwindcss(),
 		sveltekit()
 	],

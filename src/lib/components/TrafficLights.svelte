@@ -36,14 +36,6 @@
 		} catch {}
 	}
 
-	async function startDrag(e: MouseEvent) {
-		if ((e.target as HTMLElement).closest('.traffic-btn')) return;
-		if (!isTauri()) return;
-		try {
-			await getCurrentWindow().startDragging();
-		} catch {}
-	}
-
 	if (isTauri()) getCurrentWindow().onResized(() => {
 		checkMaximized();
 	});
@@ -54,37 +46,35 @@
 </script>
 
 <div
-	class="group fixed top-2 left-4 z-[9999] flex cursor-grab items-center gap-2 rounded-2xl border bg-background/80 px-3 py-2 backdrop-blur-md opacity-0 transition-opacity duration-300 hover:opacity-100 select-none"
-	onmousedown={startDrag}
+	class="flex items-center justify-center gap-2 rounded-lg mx-auto py-1.5 px-3 select-none"
 	role="toolbar"
-	tabindex="0"
 	aria-label="窗口控制"
 >
 	<button
-		class="traffic-btn group flex size-4 items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:bg-[#ff5f57]/80 active:scale-90"
+		class="traffic-btn flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:bg-[#ff5f57]/80 active:scale-90"
 		onclick={handleClose}
 		aria-label="关闭"
 	>
-		<X class="size-3 text-[#b5301d] opacity-0 transition-opacity group-hover:opacity-100" />
+		<X class="size-3 text-[#b5301d]" />
 	</button>
 
 	<button
-		class="traffic-btn group flex size-4 items-center justify-center rounded-full bg-[#febc2e] transition-all hover:bg-[#febc2e]/80 active:scale-90"
+		class="traffic-btn flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#febc2e] transition-all hover:bg-[#febc2e]/80 active:scale-90"
 		onclick={handleMinimize}
 		aria-label="最小化"
 	>
-		<Minus class="size-3 text-[#9f5c04] opacity-0 transition-opacity group-hover:opacity-100" />
+		<Minus class="size-3 text-[#9f5c04]" />
 	</button>
 
 	<button
-		class="traffic-btn group flex size-4 items-center justify-center rounded-full bg-[#28c840] transition-all hover:bg-[#28c840]/80 active:scale-90"
+		class="traffic-btn flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#28c840] transition-all hover:bg-[#28c840]/80 active:scale-90"
 		onclick={handleMaximize}
 		aria-label={isMaximized ? '还原' : '最大化'}
 	>
 		{#if isMaximized}
-			<Minimize2 class="size-3 text-[#187216] opacity-0 transition-opacity group-hover:opacity-100" />
+			<Minimize2 class="size-3 text-[#187216]" />
 		{:else}
-			<Maximize2 class="size-3 text-[#187216] opacity-0 transition-opacity group-hover:opacity-100" />
+			<Maximize2 class="size-3 text-[#187216]" />
 		{/if}
 	</button>
 </div>

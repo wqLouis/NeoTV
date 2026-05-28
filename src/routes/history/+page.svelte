@@ -7,14 +7,10 @@
 	import PageHeader from '$lib/components/business/PageHeader.svelte';
 	import EmptyState from '$lib/components/business/EmptyState.svelte';
 	import DoubanCard from '$lib/components/DoubanCard.svelte';
-	import { useIntlayer } from 'svelte-intlayer';
-	
 
-	const content = useIntlayer('common');
-
-	const titleLabel = $derived(String($content.historyTitle.value));
-	const noHistoryLabel = $derived(String($content.noHistory.value));
-	const clearAllLabel = $derived(String($content.clearHistory.value));
+	const titleLabel = '历史';
+	const noHistoryLabel = '暂无观看记录';
+	const clearAllLabel = '清空';
 
 	function handlePlay(item: HistoryItem) {
 		const params = new URLSearchParams({

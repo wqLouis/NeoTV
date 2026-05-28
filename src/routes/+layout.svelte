@@ -12,9 +12,7 @@
 	import TrafficLights from '$lib/components/TrafficLights.svelte';
 	import { platform } from '@tauri-apps/plugin-os';
 	import { isTauri } from '@tauri-apps/api/core';
-	import { useIntlayer } from 'svelte-intlayer';
-	import { setIntlayerLocale, getIntlayerLocale } from '$lib/intlayer/locale';
-	import type { Locale } from 'intlayer';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import './layout.css';
 
 	let { children } = $props();
@@ -22,18 +20,23 @@
 	// Show traffic lights only on Windows and Linux (not macOS)
 	let showTrafficLights = $state(false);
 
-	// Intlayer navigation content
-	const nav = useIntlayer('navigation');
+	const navLabels = {
+		search: '搜索',
+		home: '首页',
+		browse: '浏览',
+		history: '历史',
+		favourites: '收藏',
+		settings: '设置'
+	};
 
 	onMount(async () => {
 		if (isTauri()) {
 			const os = await platform();
 			showTrafficLights = os === 'windows' || os === 'linux';
 		}
-
-		// Initialize intlayer locale from cookie/localStorage
-		const savedLocale = getIntlayerLocale();
-		setIntlayerLocale(savedLocale as Locale);
+		themeStore.init();
+		modalStore.init();
+		await modalStore.checkGstLibav();
 	});
 
 	const upperNav = [
@@ -66,29 +69,33 @@
 		}
 	}
 
-	onMount(async () => {
-		themeStore.init();
-		modalStore.init();
-		await modalStore.checkGstLibav();
-	});
-
-	async function switchLocale(newLocale: Locale) {
-		setIntlayerLocale(newLocale);
-		window.location.reload();
+	function startNavDrag(e: MouseEvent) {
+		// Don't start drag if clicking on interactive elements
+		const target = e.target as HTMLElement;
+		if (target.closest('a, button, input, [role="toolbar"]')) return;
+		if (!isTauri()) return;
+		getCurrentWindow().startDragging().catch(() => {});
 	}
 </script>
 
 <svelte:head>
-		<link rel="icon" type="image/png" href="/favicon.png" />
-		<link rel="shortcut icon" type="image/png" href="/favicon.png" />
-	</svelte:head>
-
-{#if showTrafficLights}
-	<TrafficLights />
-{/if}
+	<link rel="icon" type="image/png" href="/favicon.png" />
+	<link rel="shortcut icon" type="image/png" href="/favicon.png" />
+</svelte:head>
 
 <div class="flex h-screen">
-	<nav class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4">
+	<nav
+		class="fixed top-0 left-0 z-50 flex h-full w-20 flex-col border-r bg-card py-4 cursor-grab active:cursor-grabbing"
+		onmousedown={startNavDrag}
+		role="banner"
+		aria-label="导航栏，可拖动窗口"
+	>
+		{#if showTrafficLights}
+			<div class="mb-2">
+				<TrafficLights />
+			</div>
+		{/if}
+
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<div class="flex flex-col items-center gap-2 py-2">
 				{#each upperNav as item (item.href)}
@@ -106,7 +113,7 @@
 						</div>
 						<span
 							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
-							>{$nav?.content?.[item.key]?.value ?? ''}</span
+							>{navLabels[item.key]}</span
 						>
 					</a>
 				{/each}
@@ -134,7 +141,7 @@
 						</div>
 						<span
 							class="text-xs transition-all duration-200 {active ? 'opacity-100' : 'h-0 opacity-0'}"
-							>{$nav?.content?.[item.key]?.value ?? ''}</span
+							>{navLabels[item.key]}</span
 						>
 					</a>
 				{/each}

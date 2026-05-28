@@ -2,21 +2,18 @@
 	import HorizontalSection from '$lib/components/HorizontalSection.svelte';
 	import PageTabBar from '$lib/components/business/PageTabBar.svelte';
 	import { Film, Tv } from '@lucide/svelte';
-	import { useIntlayer } from 'svelte-intlayer';
-
-	const content = useIntlayer('home');
 
 	let selectedType = $state<'movie' | 'tv'>('movie');
 
 	let typeOptions = $derived([
-		{ value: 'movie', label: String($content.movie.value), icon: Film },
-		{ value: 'tv', label: String($content.tv.value), icon: Tv }
+		{ value: 'movie', label: '电影', icon: Film },
+		{ value: 'tv', label: '电视剧', icon: Tv }
 	]);
 
-	let hotMovieTitle = $derived(String($content.hotMovies.value));
-	let latestMovieTitle = $derived(String($content.latestMovies.value));
-	let hotTvTitle = $derived(String($content.hotTv.value));
-	let latestTvTitle = $derived(String($content.latestTv.value));
+	let hotMovieTitle = '热门电影';
+	let latestMovieTitle = '最新电影';
+	let hotTvTitle = '热门电视剧';
+	let latestTvTitle = '最新电视剧';
 
 	function handleTypeChange(v: string) {
 		selectedType = v as typeof selectedType;
