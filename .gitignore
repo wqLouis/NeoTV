@@ -51,7 +51,11 @@ dist-linux
 *.pfx
 *.pem
 *.p12
+*.key
 cert_base64.txt
+
+# Secrets directory
+.secrets/
 
 # cache
 image_cache
