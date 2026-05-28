@@ -14,8 +14,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  APP_NAME: NeoTV
-  APP_IDENTIFIER: com.neotv.app
 
 jobs:
   ###########################################################################
@@ -65,7 +63,7 @@ jobs:
       - name: Prepare artifacts
         run: |
           mkdir -p dist-linux
-          cp src-tauri/target/x86_64-unknown-linux-gnu/release/app dist-linux/neotv
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/neotv dist-linux/neotv
           chmod +x dist-linux/neotv
 
       - name: Upload Linux artifact

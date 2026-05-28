@@ -2,15 +2,128 @@ name: Build Release
 
 on:
   push:
-    branches: [main]
     tags:
       - 'v*'
   workflow_dispatch:
 
 jobs:
+  ###########################################################################
+  # Linux build (x86_64)
+  ###########################################################################
+  build-linux:
+    name: "Linux (x86_64)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install system dependencies (Tauri)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Bun dependencies
+        run: bun install
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build Tauri app (release)
+        run: |
+          cd src-tauri
+          cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p dist-linux
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/neotv dist-linux/neotv
+          chmod +x dist-linux/neotv
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-linux-x86_64
+          path: dist-linux/neotv
+          compression-level: 0
+          if-no-files-found: error
+
+  ###########################################################################
+  # Windows build (x86_64)
+  ###########################################################################
+  build-windows:
+    name: "Windows (x86_64)"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      msi_path: ${{ steps.find-outputs.outputs.MSI_PATH }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Bun dependencies
+        run: bun install
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build Windows exe + MSI
+        run: bunx tauri build
+
+      - name: Find outputs
+        id: find-outputs
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem ./src-tauri/target/release -Filter "*.exe" -File -EA SilentlyContinue | Where-Object { $_.FullName -notmatch "WebView2" -and $_.FullName -notmatch "setup" } | Select-Object -First 1 -ExpandProperty FullName
+          $msi = Get-ChildItem ./src-tauri/target/release -Filter "*.msi" -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          echo "EXE_PATH=$exe"
+          echo "MSI_PATH=$msi"
+          echo "EXE_PATH=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          echo "MSI_PATH=$msi" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-win-exe
+          path: ${{ steps.find-outputs.outputs.EXE_PATH }}
+          retention-days: 7
+
+      - name: Upload MSI artifact
+        if: steps.find-outputs.outputs.MSI_PATH != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoTV-win-msi
+          path: ${{ steps.find-outputs.outputs.MSI_PATH }}
+          retention-days: 7
+
+  ###########################################################################
+  # Android build (aarch64)
+  ###########################################################################
   build-android:
+    name: "Android (aarch64)"
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -65,86 +178,41 @@ jobs:
       - name: Sign APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.keystore \
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | head -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "ERROR: apksigner not found in $ANDROID_HOME/build-tools"
+            exit 1
+          fi
+          "$APKSIGNER" sign --ks release.keystore \
             --ks-key-alias libretv-key \
-            --ks-pass pass:android \
-            --key-pass pass:android \
+            --ks-pass pass:"$KEYSTORE_PASS" \
+            --key-pass pass:"$KEY_PASS" \
             --out NeoTV.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-
-      - name: Find APK
-        id: find-apk
-        run: |
-          APK_PATH=$(find . -name "*.apk" -type f | grep -v baselineProfiles | head -1)
-          echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
+          rm -f release.keystore
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NeoTV-aarch64
-          path: ${{ steps.find-apk.outputs.APK_PATH }}
+          name: NeoTV-android-aarch64
+          path: NeoTV.apk
           retention-days: 7
 
-  build-windows:
-    runs-on: windows-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    outputs:
-      msi_path: ${{ steps.find-outputs.outputs.MSI_PATH }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install Bun dependencies
-        run: bun install
-
-      - name: Build frontend
-        run: bun run build
-
-      - name: Build Windows exe + MSI
-        run: bunx tauri build
-
-      - name: Find outputs
-        id: find-outputs
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem ./src-tauri/target/release -Filter "*.exe" -File -EA SilentlyContinue | Where-Object { $_.FullName -notmatch "WebView2" -and $_.FullName -notmatch "setup" } | Select-Object -First 1 -ExpandProperty FullName
-          $msi = Get-ChildItem ./src-tauri/target/release -Filter "*.msi" -File -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          echo "EXE_PATH=$exe"
-          echo "MSI_PATH=$msi"
-          echo "EXE_PATH=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          echo "MSI_PATH=$msi" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Upload exe artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NeoTV-win-exe
-          path: ${{ steps.find-outputs.outputs.EXE_PATH }}
-          retention-days: 7
-
-      - name: Upload MSI artifact
-        if: steps.find-outputs.outputs.MSI_PATH != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: NeoTV-win-msi
-          path: ${{ steps.find-outputs.outputs.MSI_PATH }}
-          retention-days: 7
-
+  ###########################################################################
+  # Release
+  ###########################################################################
   release:
-    needs: [build-android, build-windows]
+    needs: [build-linux, build-windows, build-android]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download APK
+      - name: Download Linux
         uses: actions/download-artifact@v4
         with:
-          name: NeoTV-aarch64
+          name: NeoTV-linux-x86_64
 
       - name: Download Windows exe
         uses: actions/download-artifact@v4
@@ -157,13 +225,19 @@ jobs:
         with:
           name: NeoTV-win-msi
 
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoTV-android-aarch64
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            *.apk
+            neotv
             *.exe
             *.msi
+            *.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
