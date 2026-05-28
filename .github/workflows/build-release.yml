@@ -148,6 +148,9 @@ jobs:
         run: |
           rm -rf src-tauri/gen/android
           bunx tauri android init --ci
+          # Fix theme reference to match custom themes.xml
+          sed -i 's|android:theme="@style/Theme\.[^"]*"|android:theme="@style/Theme.app"|g' \
+            src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       - name: Copy custom Android files
         run: |
