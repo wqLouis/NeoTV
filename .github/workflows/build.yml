@@ -53,17 +53,14 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install Bun dependencies
+        run: bun install
 
       - name: Build frontend
-        run: npm run build
+        run: bun run build
 
       - name: Build Tauri app (release)
         run: |
@@ -110,17 +107,14 @@ jobs:
             libssl-dev \
             osslsigncode
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install Bun dependencies
+        run: bun install
 
       - name: Build frontend
-        run: npm run build
+        run: bun run build
 
       - name: Build Tauri app (release — Windows cross-compile)
         run: |
